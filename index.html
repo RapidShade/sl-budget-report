@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+            font-family: -apple-system, BlinkMacMacFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
             color: #333;
             margin: 0;
             padding: 20px;
@@ -16,7 +16,7 @@
             justify-content: center;
             height: 100vh;
             box-sizing: border-box;
-            text-align: center;
+            text-align: center; /* Center error messages */
         }
         .container {
             text-align: center;
@@ -46,7 +46,7 @@
             font-size: 1.1em;
             transition: background-color 0.3s ease;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            margin: 5px;
+            margin: 5px; /* Add some margin for the new button */
         }
         button:hover {
             background-color: #45a049;
@@ -71,145 +71,251 @@
             border-radius: 5px;
         }
     </style>
-    <!-- Load pdf-lib and its fontkit extension -->
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
-    <script src="https://unpkg.com/@pdf-lib/fontkit/dist/fontkit.umd.min.js"></script>
-    <!-- This is the Grist plugin API script provided in your original file -->
-    <script src="https://sportsledger.koe.org.gr/grist-plugin-api.js"></script>
+    <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
 </head>
 <body>
     <div class="container" id="widget-container">
         <h2>Event PDF Budget Report</h2>
-        <p id="message">Connecting to Grist... Please select a record.</p>
+        <p id="message">Attempting to connect to Grist API...</p>
         <button id="downloadPdfButton" style="display: none;" disabled>Download PDF Report</button>
-        <button id="debugButton" disabled>Debug Record Fetch</button>
+        <button id="debugButton" style="display: block;" disabled>Debug Record Fetch</button>
         <div id="record-info"></div>
     </div>
 
     <script>
-        console.log("[WIDGET] v5.2 Starting");
+        console.log("[WIDGET] v4.16 Starting (Dynamic Expense Grouping)");
 
-        // Ensure pdf-lib and fontkit are loaded
-        if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
-            document.getElementById('widget-container').innerHTML = '<div class="error-message">Error: PDF Libraries not loaded.</div>';
-            throw new Error("PDF-Lib or fontkit not found.");
-        }
-
-        const { PDFDocument, rgb } = PDFLib;
+        const { PDFDocument, rgb, StandardFonts } = PDFLib;
         const messageElement = document.getElementById('message');
         const downloadPdfButton = document.getElementById('downloadPdfButton');
         const debugButton = document.getElementById('debugButton');
         const recordInfoElement = document.getElementById('record-info');
         let currentRecord = null;
+        let currentRecordId = null;
+        let expenseCategoriesMap = new Map(); // Cache expense categories for lookup
 
-        /**
-         * Updates the UI based on whether a record is selected.
-         * @param {object|null} record - The Grist record object, or null if none is selected.
-         */
-        function updateUI(record) {
-            currentRecord = record;
-            if (record && Object.keys(record).length > 0) {
-                console.log("[WIDGET] Record selected:", record);
-                messageElement.style.display = 'none';
-                downloadPdfButton.style.display = 'inline-block';
-                downloadPdfButton.disabled = false;
-                recordInfoElement.textContent = `Selected: ${record.Name || record.EventCode || 'Unnamed Event'}`;
-            } else {
-                console.log("[WIDGET] No record selected.");
-                currentRecord = null;
-                messageElement.style.display = 'block';
-                messageElement.textContent = "Please select a record in the table.";
-                downloadPdfButton.style.display = 'none';
-                downloadPdfButton.disabled = true;
-                recordInfoElement.textContent = '';
-            }
-        }
-
-        /**
-         * Formats a date value (timestamp or string) into YYYY-MM-DD format.
-         * @param {number|string} dateInput - The date value from Grist.
-         * @returns {string} The formatted date string or 'N/A'.
-         */
-        function formatDate(dateInput) {
-            if (!dateInput) return 'N/A';
-            // Grist sends dates as seconds-since-epoch timestamps
-            const date = new Date(dateInput * 1000);
+        function formatDate(dateValue) {
+            if (!dateValue) return 'N/A';
+            const date = new Date(dateValue);
             if (isNaN(date.getTime())) return 'Invalid Date';
             return date.toISOString().split('T')[0];
         }
 
-        /**
-         * Generates and triggers the download of a PDF report for the current record.
-         */
+        function formatCurrency(amount) {
+            if (typeof amount !== 'number') return 'N/A';
+            return amount.toLocaleString('el-GR', { style: 'currency', currency: 'EUR' });
+        }
+
         async function generatePdfReport() {
             if (!currentRecord) {
                 console.warn("[WIDGET] No record selected for PDF generation.");
-                alert("Please select a record first.");
                 return;
             }
 
-            console.log("[WIDGET] Generating PDF for record ID:", currentRecord.id);
-            downloadPdfButton.disabled = true;
-            downloadPdfButton.textContent = 'Generating...';
+            console.log("[WIDGET] Attempting to generate PDF for record ID:", currentRecordId, "with data:", currentRecord);
 
             try {
-                // Fetch fonts that support Unicode (including Greek characters)
-                const fontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-R.ttf';
-                const boldFontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-B.ttf';
-
-                const [fontBytes, boldFontBytes] = await Promise.all([
-                    fetch(fontUrl).then(res => res.arrayBuffer()),
-                    fetch(boldFontUrl).then(res => res.arrayBuffer())
-                ]);
-
                 const pdfDoc = await PDFDocument.create();
-
-                // Register fontkit with pdf-lib
-                pdfDoc.registerFontkit(fontkit);
-
-                // Embed the custom fonts
-                const customFont = await pdfDoc.embedFont(fontBytes);
-                const customBoldFont = await pdfDoc.embedFont(boldFontBytes);
-
-                const page = pdfDoc.addPage();
-
-                const {
-                    EventCode, Name, Sport, Discipline, DateStart, DateEnd,
-                    CITY, VENUE, LEVEL, POOL_SIZE, Organiser
-                } = currentRecord;
+                let page = pdfDoc.addPage();
+                const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+                const monoFont = await pdfDoc.embedFont(StandardFonts.Courier);
 
                 let y = 750;
                 const x = 50;
-                const lineHeight = 20;
+                const lineHeight = 15;
+                const margin = 50;
+                const availableWidth = page.getWidth() - 2 * margin;
 
-                page.drawText('Event Report', { x, y, font: customBoldFont, size: 24, color: rgb(0.1, 0.1, 0.1) });
-                y -= 40;
+                // Function to add new page if content overflows
+                const addNewPage = () => {
+                    page = pdfDoc.addPage();
+                    y = page.getHeight() - margin; // Reset y for new page
+                };
 
-                const addDetail = (label, value) => {
-                    if (y < 50) { // Add new page if content overflows
-                        page = pdfDoc.addPage();
-                        y = 780;
-                    }
-                    page.drawText(`${label}: `, { x, y, font: customBoldFont, size: 12 });
-                    const labelWidth = customBoldFont.widthOfTextAtSize(`${label}: `, 12);
-                    page.drawText(String(value || 'N/A'), { x: x + labelWidth + 2, y, font: customFont, size: 12 });
+                // --- Event Details Section ---
+                page.drawText('ΑΝΑΛΥΤΙΚΟΣ ΠΡΟΥΠΟΛΟΓΙΣΜΟΣ ΔΙΟΡΓΑΝΩΣΗΣ', {
+                    x,
+                    y,
+                    font: boldFont,
+                    size: 20,
+                    color: rgb(0.17, 0.24, 0.31),
+                });
+                y -= 30;
+
+                const addDetail = (label, value, isBold = false) => {
+                    if (y < margin + 2 * lineHeight) addNewPage(); // Ensure space for at least 2 lines + buffer
+                    page.drawText(`${label}: `, {
+                        x,
+                        y,
+                        font: boldFont,
+                        size: 11,
+                        color: rgb(0, 0, 0),
+                    });
+                    const labelWidth = boldFont.widthOfTextAtSize(`${label}: `, 11);
+                    page.drawText(String(value || 'N/A'), {
+                        x: x + labelWidth + 5,
+                        y,
+                        font: isBold ? boldFont : font,
+                        size: 11,
+                        color: rgb(0, 0, 0),
+                    });
                     y -= lineHeight;
                 };
 
-                addDetail('Event Code', EventCode);
-                addDetail('Name', Name);
-                addDetail('Sport', Sport);
-                addDetail('Discipline', Discipline);
-                addDetail('Start Date', formatDate(DateStart));
-                addDetail('End Date', formatDate(DateEnd));
-                addDetail('City', CITY);
-                addDetail('Venue', VENUE);
-                addDetail('Level', LEVEL);
-                addDetail('Pool Size', POOL_SIZE);
-                addDetail('Organiser', Organiser);
+                const startDate = currentRecord.$DateStart ? new Date(currentRecord.$DateStart) : null;
+                const endDate = currentRecord.$DateEnd ? new Date(currentRecord.$DateEnd) : null;
+                const month = startDate ? startDate.toLocaleString('el-GR', { month: 'long' }).toUpperCase() : 'N/A';
+                const datesCombined = (startDate && endDate) ? `${formatDate(startDate)} - ${formatDate(endDate)}` : 'N/A';
+
+                addDetail('ΑΘΛΗΜΑ', currentRecord.$Sport);
+                addDetail('ΜΗΝΑΣ', month);
+                addDetail('ΗΜ/ΝΙΑ ΔΙΕΞΑΓ.', datesCombined);
+                addDetail('ΑΓΩΝΙΣΤΙΚΗ ΔΙΟΡΓΑΝΩΣΗ/ΤΙΤΛΟΣ', currentRecord.$Name, true); // Use $Name for title
+                addDetail('ΠΕΡΙΦΕΡΕΙΑΚΗ ΕΠΙΤΡΟΠΗ/ΠΟΛΗ', currentRecord.$PERIF_CITY);
+                addDetail('Κολ. 25 ή 50μ.', currentRecord.$POOL_SIZE);
+                addDetail('ΠΟΛΗ', currentRecord.$CITY);
+                addDetail('ΚΟΛ/ΡΙΟ', currentRecord.$VENUE);
+                addDetail('LEVEL/ΕΠΙΠΕΔΟ', currentRecord.$LEVEL); // Use $LEVEL for level
+                y -= lineHeight * 2; // Extra space before expenses
+
+                // --- Expenses Section ---
+                page.drawText('ΚΑΤΗΓΟΡΙΕΣ ΕΞΟΔΩΝ', {
+                    x,
+                    y,
+                    font: boldFont,
+                    size: 16,
+                    color: rgb(0.17, 0.24, 0.31),
+                });
+                y -= 20;
+
+                // Fetch Expenses for the current selected Event
+                const expensesForEvent = await grist.doc.fetchTable('Expenses', { filters: { Event: [currentRecord.id] } });
+
+                // Group and aggregate expenses
+                const groupedExpenses = {};
+                let grandTotal = 0;
+
+                expensesForEvent.forEach(expense => {
+                    const categoryId = expense.$ExpenseCategory;
+                    const categoryInfo = expenseCategoriesMap.get(categoryId); // Use the cached map
+
+                    if (categoryInfo) {
+                        const groupName = categoryInfo.groupName; // e.g., "1. Εγκαταστάσεις & Υποδομές"
+
+                        if (!groupedExpenses[groupName]) {
+                            groupedExpenses[groupName] = {
+                                displayOrder: categoryInfo.displayOrder,
+                                items: [],
+                                subtotal: 0
+                            };
+                        }
+                        groupedExpenses[groupName].items.push({
+                            description: expense.$LineDescription,
+                            amount: expense.$Amount
+                        });
+                        groupedExpenses[groupName].subtotal += expense.$Amount;
+                        grandTotal += expense.$Amount;
+                    }
+                });
+
+                // Convert groupedExpenses object to an array and sort by displayOrder
+                const sortedGroups = Object.values(groupedExpenses).sort((a, b) => a.displayOrder - b.displayOrder);
+
+                for (const group of sortedGroups) {
+                    if (y < margin + 4 * lineHeight) addNewPage(); // Ensure space for group title + items + subtotal
+                    page.drawText(group.groupName, { // Group Title
+                        x,
+                        y,
+                        font: boldFont,
+                        size: 12,
+                        color: rgb(0.2, 0.2, 0.2),
+                    });
+                    y -= lineHeight;
+
+                    // Header for description and amount columns
+                    if (y < margin + 2 * lineHeight) addNewPage();
+                    page.drawText('ΠΕΡΙΓΡΑΦΗ', {
+                        x: x + 10,
+                        y,
+                        font: boldFont,
+                        size: 9,
+                        color: rgb(0.3, 0.3, 0.3),
+                    });
+                    page.drawText('ΠΟΣΟ', {
+                        x: x + availableWidth - 60, // Align right
+                        y,
+                        font: boldFont,
+                        size: 9,
+                        color: rgb(0.3, 0.3, 0.3),
+                    });
+                    y -= lineHeight / 2; // Smaller gap after column headers
+
+                    page.drawLine({
+                        start: { x, y: y },
+                        end: { x: page.getWidth() - margin, y: y },
+                        thickness: 0.5,
+                        color: rgb(0.7, 0.7, 0.7),
+                    });
+                    y -= lineHeight;
+
+                    for (const item of group.items) {
+                        if (y < margin + lineHeight) addNewPage(); // Ensure space for item
+                        page.drawText(item.description || 'N/A', {
+                            x: x + 10,
+                            y,
+                            font: font,
+                            size: 10,
+                            color: rgb(0.3, 0.3, 0.3),
+                        });
+                        const amountText = formatCurrency(item.amount);
+                        const amountWidth = font.widthOfTextAtSize(amountText, 10);
+                        page.drawText(amountText, {
+                            x: x + availableWidth - amountWidth,
+                            y,
+                            font: font,
+                            size: 10,
+                            color: rgb(0.3, 0.3, 0.3),
+                        });
+                        y -= lineHeight;
+                    }
+                    y -= lineHeight / 2; // Small gap before subtotal
+
+                    // Category Subtotal
+                    if (y < margin + lineHeight) addNewPage();
+                    page.drawText(formatCurrency(group.subtotal), {
+                        x: x + availableWidth - boldFont.widthOfTextAtSize(formatCurrency(group.subtotal), 12),
+                        y,
+                        font: boldFont,
+                        size: 12,
+                        color: rgb(0, 0, 0),
+                    });
+                    y -= lineHeight * 2; // Gap after subtotal for next group
+                }
+
+                // --- Grand Total ---
+                if (y < margin + 2 * lineHeight) addNewPage();
+                page.drawText('ΣΥΝΟΛΟ ΠΡΟΥΠΟΛΟΓΙΣΜΟΥ', {
+                    x,
+                    y,
+                    font: boldFont,
+                    size: 14,
+                    color: rgb(0.17, 0.24, 0.31),
+                });
+                const totalText = formatCurrency(grandTotal);
+                const totalWidth = boldFont.widthOfTextAtSize(totalText, 14);
+                page.drawText(totalText, {
+                    x: x + availableWidth - totalWidth,
+                    y,
+                    font: boldFont,
+                    size: 14,
+                    color: rgb(0.17, 0.24, 0.31),
+                });
 
                 const pdfBytes = await pdfDoc.save();
-                const filename = `Event_Report_${EventCode || 'Unknown'}.pdf`;
+                const filename = `Event_Budget_Report_${currentRecord.$EventCode || 'Unknown'}.pdf`;
+
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
@@ -219,154 +325,137 @@
                 document.body.removeChild(link);
                 URL.revokeObjectURL(link.href);
 
-                console.log(`[WIDGET] PDF downloaded: ${filename}`);
+                console.log(`[WIDGET] PDF generated and downloaded: ${filename}`);
 
             } catch (error) {
                 console.error("[WIDGET] Error generating PDF:", error);
-                recordInfoElement.textContent = 'Error creating PDF. Check console.';
-            } finally {
-                downloadPdfButton.disabled = false;
-                downloadPdfButton.textContent = 'Download PDF Report';
+                alert("Failed to generate PDF report. Check your browser's console for details.");
             }
         }
 
-        // --- GRIST API INITIALIZATION ---
+        // --- DIAGNOSTIC CODE (NOT FOR PRODUCTION) ---
+        // This attempts to interact with Grist API directly without relying on grist.ready().then()
+        // to see if grist.doc becomes available in any case.
+        let gristApiInitialized = false;
 
-        // Check if the grist object exists.
-        if (typeof grist === 'undefined') {
-            document.getElementById('widget-container').innerHTML = '<div class="error-message">Error: Grist API not available.</div>';
-            throw new Error("Grist API not found.");
+        async function attemptGristApiDirectAccess() {
+            if (typeof grist === 'undefined') {
+                console.warn("[WIDGET] 'grist' object is still undefined. Retrying direct access...");
+                messageElement.textContent = "Connecting to Grist API...";
+                setTimeout(attemptGristApiDirectAccess, 500); // Retry
+                return;
+            }
+
+            if (gristApiInitialized) {
+                console.log("[WIDGET] Grist API already initialized (direct access).");
+                return;
+            }
+
+            console.log("[WIDGET] 'grist' object found. Attempting to set up onRecord listener and enable buttons directly.");
+
+            try {
+                // Request full access directly.
+                grist.set.requestedPermissions({ requiredAccess: 'full' });
+
+                // Fetch and cache Expense Categories
+                const allExpenseCategories = await grist.doc.fetchTable('ExpenseCategory');
+                allExpenseCategories.forEach(cat => {
+                    expenseCategoriesMap.set(cat.id, {
+                        groupName: cat.$GroupName,
+                        displayOrder: cat.$DisplayOrder,
+                        name: cat.$Name
+                    });
+                });
+                console.log("[WIDGET] Expense Categories fetched and cached.");
+
+
+                grist.on('record', (record, mappings) => {
+                    currentRecord = record;
+                    currentRecordId = record ? record.id : null;
+
+                    console.log("[WIDGET] grist.onRecord triggered (direct access).");
+                    console.log("[WIDGET] Current record data:", currentRecord);
+                    console.log("[WIDGET] Current record ID:", currentRecordId);
+                    console.log("[WIDGET] Mappings provided:", mappings);
+
+                    if (currentRecord && Object.keys(currentRecord).length > 0 && currentRecord.id) {
+                        messageElement.style.display = 'none';
+                        downloadPdfButton.style.display = 'block';
+                        recordInfoElement.textContent = `Selected Event: ${currentRecord.$Name || currentRecord.$EventCode || 'Unnamed Event'}`;
+                        downloadPdfButton.disabled = false;
+                        console.log("[WIDGET] Event record detected. Button enabled (direct access).");
+                    } else {
+                        messageElement.style.display = 'block';
+                        downloadPdfButton.style.display = 'none';
+                        recordInfoElement.textContent = '';
+                        downloadPdfButton.disabled = true;
+                        console.log("[WIDGET] No event record selected. Button disabled (direct access).");
+                    }
+                });
+
+                // Enable buttons immediately after setting up listener
+                debugButton.disabled = false;
+                downloadPdfButton.disabled = true; // Initially disabled, will enable on record select
+                messageElement.textContent = "Grist API attempted direct connection. Select an event.";
+                gristApiInitialized = true;
+                console.log("[WIDGET] Grist API listeners and buttons enabled (direct access).");
+
+            } catch (error) {
+                console.error("[WIDGET] Error during direct Grist API setup:", error);
+                messageElement.textContent = "Error setting up Grist API directly. Check console.";
+                const container = document.getElementById('widget-container');
+                if (container) {
+                    container.innerHTML = '<div class="error-message">Error with Grist API. Check console for details.</div>';
+                }
+            }
         }
 
-        // Signal to Grist that the widget is ready and requires full access.
-        grist.ready({
-            requiredAccess: 'full'
+        // Start attempting direct Grist API access after a short initial delay
+        setTimeout(attemptGristApiDirectAccess, 100);
+        // --- END DIAGNOSTIC CODE ---
+
+
+        // Event listener for the new debug button
+        debugButton.addEventListener('click', async () => {
+            console.log("[WIDGET] Debug Button clicked. Attempting to fetch selected record directly.");
+            console.log("[WIDGET] grist.doc object (on debug click):", grist.doc);
+
+            if (!grist.doc || typeof grist.doc.fetchSelectedRecord !== 'function') {
+                console.error("[WIDGET] grist.doc is not fully initialized or accessible for fetching. Cannot fetch record.");
+                recordInfoElement.textContent = 'Grist API not ready for direct fetch. Try again or select a record.';
+                return;
+            }
+
+            try {
+                const fetchedRecord = await grist.doc.fetchSelectedRecord();
+                console.log("[WIDGET] grist.doc.fetchSelectedRecord() result:", fetchedRecord);
+
+                if (fetchedRecord && Object.keys(fetchedRecord).length > 0 && fetchedRecord.id) {
+                    currentRecord = fetchedRecord; // Update currentRecord for PDF generation
+                    currentRecordId = fetchedRecord.id;
+
+                    messageElement.style.display = 'none';
+                    downloadPdfButton.style.display = 'block';
+                    recordInfoElement.textContent = `Manually Fetched Event: ${fetchedRecord.$Name || fetchedRecord.$EventCode || 'Unnamed Event'}`;
+                    downloadPdfButton.disabled = false;
+                    console.log("[WIDGET] Manually fetched record data. Button enabled.");
+                } else {
+                    messageElement.style.display = 'block';
+                    downloadPdfButton.style.display = 'none';
+                    recordInfoElement.textContent = 'No record fetched by debug button.';
+                    downloadPdfButton.disabled = true;
+                    console.log("[WIDGET] No record fetched by debug button. Button disabled.");
+                }
+
+            } catch (error) {
+                console.error("[WIDGET] Error fetching record via debug button:", error);
+                recordInfoElement.textContent = 'Error fetching record via debug button. Check console.';
+            }
         });
 
-        // Use grist.onRecord to listen for selections in the linked table.
-        grist.onRecord(updateUI);
-
-        // --- EVENT LISTENERS ---
-
+        // Attach event listener to the download button
         downloadPdfButton.addEventListener('click', generatePdfReport);
 
-        // The debug button will manually fetch the currently selected record.
-        debugButton.addEventListener('click', async () => {
-            console.log("[WIDGET] Debug: Attempting to fetch selected record manually.");
-            try {
-                // Use the modern grist.fetchSelectedRecord() function
-                const record = await grist.fetchSelectedRecord();
-                if (record) {
-                     console.log("[WIDGET] Debug: Fetched record successfully:", record);
-                     recordInfoElement.textContent = `Debug Fetch OK: ${record.Name}`;
-                     updateUI(record); // Update the whole UI with the fetched record
-                } else {
-                     console.log("[WIDGET] Debug: No record is currently selected.");
-                     recordInfoElement.textContent = 'Debug: No record selected.';
-                }
-            } catch (error) {
-                console.error("[WIDGET] Debug: Error fetching record:", error);
-                recordInfoElement.textContent = 'Debug: Error fetching record.';
-            }
-        });
-        
-        // Enable the debug button now that listeners are attached.
-        debugButton.disabled = false;
-
     </script>
-
-<script type="module">
-import * as pdfLib from "https://unpkg.com/pdf-lib@1.17.1";
-
-console.log("[WIDGET] v5.3 - Expense Report by Category");
-
-let current = null;
-let grist = window.grist;
-
-grist.ready();
-
-grist.onRecord(async (rec) => {
-  current = rec;
-  const btn = document.getElementById("btn");
-  const status = document.getElementById("status");
-
-  if (!rec || !rec.id) {
-    status.textContent = "No event selected.";
-    btn.disabled = true;
-    return;
-  }
-
-  status.textContent = `Ready: ${rec.Name}`;
-  btn.disabled = false;
-});
-
-document.getElementById("btn").addEventListener("click", async () => {
-  if (!current || !current.id) {
-    alert("No event selected.");
-    return;
-  }
-
-  const { PDFDocument, StandardFonts } = pdfLib;
-  const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage();
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const { width, height } = page.getSize();
-
-  let y = height - 40;
-  const draw = (text, x = 50, size = 12) => {
-    if (y < 40) {
-      y = height - 40;
-      page = pdfDoc.addPage();
-    }
-    page.drawText(text, { x, y, size, font });
-    y -= size + 4;
-  };
-
-  draw("Event Budget Report");
-  draw("");
-  draw(`Event: ${current.Name}`);
-  draw(`City: ${current.CITY || ""}, Venue: ${current.VENUE || ""}`);
-  draw(`Date: ${current.DateStart || ""} - ${current.DateEnd || ""}`);
-  draw("");
-
-  const { records: expenses } = await grist.docApi.fetchTable("Expenses");
-  const { records: categories } = await grist.docApi.fetchTable("ExpenseCategory");
-
-  const filtered = expenses.filter(e => e.Event === current.id);
-  const grouped = {};
-
-  for (const exp of filtered) {
-    const cat = categories.find(c => c.id === exp.ExpenseCategory) || {};
-    const group = cat.GroupName || "Other";
-    if (!grouped[group]) grouped[group] = [];
-    grouped[group].push({
-      item: exp.Description || "(no description)",
-      amount: exp.AmountLocal || 0,
-      category: cat.Name || "(uncategorized)"
-    });
-  }
-
-  for (const [group, items] of Object.entries(grouped)) {
-    draw(`== ${group} ==`);
-    let subtotal = 0;
-    for (const item of items) {
-      draw(`• ${item.category}: ${item.item} - €${item.amount.toFixed(2)}`, 60);
-      subtotal += item.amount;
-    }
-    draw(`Subtotal: €${subtotal.toFixed(2)}`);
-    draw("");
-  }
-
-  const pdfBytes = await pdfDoc.save();
-  const blob = new Blob([pdfBytes], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `BudgetReport_${current.EventCode || "event"}.pdf`;
-  a.click();
-  URL.revokeObjectURL(url);
-});
-</script>
-
 </body>
 </html>
