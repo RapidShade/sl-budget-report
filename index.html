@@ -72,10 +72,304 @@
         }
     </style>
     <!-- Load pdf-lib and its fontkit extension -->
-    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
-    <script src="https://unpkg.com/@pdf-lib/fontkit/dist/fontkit.umd.min.js"></script>
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js">
+console.log("[WIDGET] v5.3 Enhancing report with grouped expenses");
+
+let currentRecord = null;
+
+grist.ready();
+
+grist.onRecord((rec) => {
+  currentRecord = rec;
+  document.getElementById("status").textContent = rec && rec.Name ? `Ready: ${rec.Name}` : "Select an event";
+  document.getElementById("btn").disabled = !rec || !rec.id;
+});
+
+document.getElementById("btn").addEventListener("click", async () => {
+  if (!currentRecord || !currentRecord.id) {
+    alert("No event selected.");
+    return;
+  }
+
+  const { PDFDocument, StandardFonts } = window.pdfLib;
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const page = pdfDoc.addPage();
+  const { width, height } = page.getSize();
+  let y = height - 40;
+
+  const drawLine = (text, indent = 0, size = 12) => {
+    page.drawText(text, { x: 50 + indent, y, size, font });
+    y -= 18;
+  };
+
+  drawLine("Event Budget Report", 0, 14); y -= 10;
+  const lines = [
+    `Event Code: ${currentRecord.EventCode || ''}`,
+    `Name: ${currentRecord.Name || ''}`,
+    `Sport: ${currentRecord.Sport || ''}`,
+    `Discipline: ${currentRecord.Discipline || ''}`,
+    `Start Date: ${currentRecord.DateStart || ''}`,
+    `End Date: ${currentRecord.DateEnd || ''}`,
+    `City: ${currentRecord.CITY || ''}`,
+    `Venue: ${currentRecord.VENUE || ''}`,
+    `Level: ${currentRecord.LEVEL || ''}`,
+    `Pool Size: ${currentRecord.POOL_SIZE || ''}`,
+    `Organiser: ${currentRecord.Organiser || ''}`
+  ];
+  lines.forEach(line => drawLine(line));
+
+  y -= 10;
+  drawLine("Expenses by Category Group", 0, 13);
+  y -= 10;
+
+  const { records: expenses } = await grist.docApi.fetchTable('Expenses');
+  const { records: categories } = await grist.docApi.fetchTable('ExpenseCategory');
+
+  const eventExpenses = expenses.filter(e => e.Event === currentRecord.id);
+
+  const grouped = {};
+  for (const exp of eventExpenses) {
+    const cat = categories.find(c => c.id === exp.ExpenseCategory);
+    const group = cat?.GroupName || "Other";
+    const catName = cat?.Name || "Unnamed";
+
+    if (!grouped[group]) grouped[group] = {};
+    if (!grouped[group][catName]) grouped[group][catName] = [];
+    grouped[group][catName].push({ label: exp.Label || "", amount: exp.Amount || 0 });
+  }
+
+  let grandTotal = 0;
+  for (const group of Object.keys(grouped).sort()) {
+    drawLine(group, 0, 12);
+    let groupTotal = 0;
+
+    for (const cat of Object.keys(grouped[group])) {
+      drawLine(cat, 10);
+      for (const exp of grouped[group][cat]) {
+        drawLine(`${exp.label}: €${exp.amount.toFixed(2)}`, 20);
+        groupTotal += exp.amount;
+      }
+    }
+
+    drawLine(`Subtotal: €${groupTotal.toFixed(2)}`, 10);
+    y -= 6;
+    grandTotal += groupTotal;
+  }
+
+  y -= 10;
+  drawLine(`TOTAL EXPENSES: €${grandTotal.toFixed(2)}`, 0, 13);
+
+  const pdfBytes = await pdfDoc.save();
+  const blob = new Blob([pdfBytes], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `BudgetReport_${currentRecord.EventCode || "event"}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+</script>
+    <script src="https://unpkg.com/@pdf-lib/fontkit/dist/fontkit.umd.min.js">
+console.log("[WIDGET] v5.3 Enhancing report with grouped expenses");
+
+let currentRecord = null;
+
+grist.ready();
+
+grist.onRecord((rec) => {
+  currentRecord = rec;
+  document.getElementById("status").textContent = rec && rec.Name ? `Ready: ${rec.Name}` : "Select an event";
+  document.getElementById("btn").disabled = !rec || !rec.id;
+});
+
+document.getElementById("btn").addEventListener("click", async () => {
+  if (!currentRecord || !currentRecord.id) {
+    alert("No event selected.");
+    return;
+  }
+
+  const { PDFDocument, StandardFonts } = window.pdfLib;
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const page = pdfDoc.addPage();
+  const { width, height } = page.getSize();
+  let y = height - 40;
+
+  const drawLine = (text, indent = 0, size = 12) => {
+    page.drawText(text, { x: 50 + indent, y, size, font });
+    y -= 18;
+  };
+
+  drawLine("Event Budget Report", 0, 14); y -= 10;
+  const lines = [
+    `Event Code: ${currentRecord.EventCode || ''}`,
+    `Name: ${currentRecord.Name || ''}`,
+    `Sport: ${currentRecord.Sport || ''}`,
+    `Discipline: ${currentRecord.Discipline || ''}`,
+    `Start Date: ${currentRecord.DateStart || ''}`,
+    `End Date: ${currentRecord.DateEnd || ''}`,
+    `City: ${currentRecord.CITY || ''}`,
+    `Venue: ${currentRecord.VENUE || ''}`,
+    `Level: ${currentRecord.LEVEL || ''}`,
+    `Pool Size: ${currentRecord.POOL_SIZE || ''}`,
+    `Organiser: ${currentRecord.Organiser || ''}`
+  ];
+  lines.forEach(line => drawLine(line));
+
+  y -= 10;
+  drawLine("Expenses by Category Group", 0, 13);
+  y -= 10;
+
+  const { records: expenses } = await grist.docApi.fetchTable('Expenses');
+  const { records: categories } = await grist.docApi.fetchTable('ExpenseCategory');
+
+  const eventExpenses = expenses.filter(e => e.Event === currentRecord.id);
+
+  const grouped = {};
+  for (const exp of eventExpenses) {
+    const cat = categories.find(c => c.id === exp.ExpenseCategory);
+    const group = cat?.GroupName || "Other";
+    const catName = cat?.Name || "Unnamed";
+
+    if (!grouped[group]) grouped[group] = {};
+    if (!grouped[group][catName]) grouped[group][catName] = [];
+    grouped[group][catName].push({ label: exp.Label || "", amount: exp.Amount || 0 });
+  }
+
+  let grandTotal = 0;
+  for (const group of Object.keys(grouped).sort()) {
+    drawLine(group, 0, 12);
+    let groupTotal = 0;
+
+    for (const cat of Object.keys(grouped[group])) {
+      drawLine(cat, 10);
+      for (const exp of grouped[group][cat]) {
+        drawLine(`${exp.label}: €${exp.amount.toFixed(2)}`, 20);
+        groupTotal += exp.amount;
+      }
+    }
+
+    drawLine(`Subtotal: €${groupTotal.toFixed(2)}`, 10);
+    y -= 6;
+    grandTotal += groupTotal;
+  }
+
+  y -= 10;
+  drawLine(`TOTAL EXPENSES: €${grandTotal.toFixed(2)}`, 0, 13);
+
+  const pdfBytes = await pdfDoc.save();
+  const blob = new Blob([pdfBytes], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `BudgetReport_${currentRecord.EventCode || "event"}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+</script>
     <!-- This is the Grist plugin API script provided in your original file -->
-    <script src="https://sportsledger.koe.org.gr/grist-plugin-api.js"></script>
+    <script src="https://sportsledger.koe.org.gr/grist-plugin-api.js">
+console.log("[WIDGET] v5.3 Enhancing report with grouped expenses");
+
+let currentRecord = null;
+
+grist.ready();
+
+grist.onRecord((rec) => {
+  currentRecord = rec;
+  document.getElementById("status").textContent = rec && rec.Name ? `Ready: ${rec.Name}` : "Select an event";
+  document.getElementById("btn").disabled = !rec || !rec.id;
+});
+
+document.getElementById("btn").addEventListener("click", async () => {
+  if (!currentRecord || !currentRecord.id) {
+    alert("No event selected.");
+    return;
+  }
+
+  const { PDFDocument, StandardFonts } = window.pdfLib;
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const page = pdfDoc.addPage();
+  const { width, height } = page.getSize();
+  let y = height - 40;
+
+  const drawLine = (text, indent = 0, size = 12) => {
+    page.drawText(text, { x: 50 + indent, y, size, font });
+    y -= 18;
+  };
+
+  drawLine("Event Budget Report", 0, 14); y -= 10;
+  const lines = [
+    `Event Code: ${currentRecord.EventCode || ''}`,
+    `Name: ${currentRecord.Name || ''}`,
+    `Sport: ${currentRecord.Sport || ''}`,
+    `Discipline: ${currentRecord.Discipline || ''}`,
+    `Start Date: ${currentRecord.DateStart || ''}`,
+    `End Date: ${currentRecord.DateEnd || ''}`,
+    `City: ${currentRecord.CITY || ''}`,
+    `Venue: ${currentRecord.VENUE || ''}`,
+    `Level: ${currentRecord.LEVEL || ''}`,
+    `Pool Size: ${currentRecord.POOL_SIZE || ''}`,
+    `Organiser: ${currentRecord.Organiser || ''}`
+  ];
+  lines.forEach(line => drawLine(line));
+
+  y -= 10;
+  drawLine("Expenses by Category Group", 0, 13);
+  y -= 10;
+
+  const { records: expenses } = await grist.docApi.fetchTable('Expenses');
+  const { records: categories } = await grist.docApi.fetchTable('ExpenseCategory');
+
+  const eventExpenses = expenses.filter(e => e.Event === currentRecord.id);
+
+  const grouped = {};
+  for (const exp of eventExpenses) {
+    const cat = categories.find(c => c.id === exp.ExpenseCategory);
+    const group = cat?.GroupName || "Other";
+    const catName = cat?.Name || "Unnamed";
+
+    if (!grouped[group]) grouped[group] = {};
+    if (!grouped[group][catName]) grouped[group][catName] = [];
+    grouped[group][catName].push({ label: exp.Label || "", amount: exp.Amount || 0 });
+  }
+
+  let grandTotal = 0;
+  for (const group of Object.keys(grouped).sort()) {
+    drawLine(group, 0, 12);
+    let groupTotal = 0;
+
+    for (const cat of Object.keys(grouped[group])) {
+      drawLine(cat, 10);
+      for (const exp of grouped[group][cat]) {
+        drawLine(`${exp.label}: €${exp.amount.toFixed(2)}`, 20);
+        groupTotal += exp.amount;
+      }
+    }
+
+    drawLine(`Subtotal: €${groupTotal.toFixed(2)}`, 10);
+    y -= 6;
+    grandTotal += groupTotal;
+  }
+
+  y -= 10;
+  drawLine(`TOTAL EXPENSES: €${grandTotal.toFixed(2)}`, 0, 13);
+
+  const pdfBytes = await pdfDoc.save();
+  const blob = new Blob([pdfBytes], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `BudgetReport_${currentRecord.EventCode || "event"}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+</script>
 </head>
 <body>
     <div class="container" id="widget-container">
@@ -273,6 +567,104 @@
         // Enable the debug button now that listeners are attached.
         debugButton.disabled = false;
 
-    </script>
+    
+console.log("[WIDGET] v5.3 Enhancing report with grouped expenses");
+
+let currentRecord = null;
+
+grist.ready();
+
+grist.onRecord((rec) => {
+  currentRecord = rec;
+  document.getElementById("status").textContent = rec && rec.Name ? `Ready: ${rec.Name}` : "Select an event";
+  document.getElementById("btn").disabled = !rec || !rec.id;
+});
+
+document.getElementById("btn").addEventListener("click", async () => {
+  if (!currentRecord || !currentRecord.id) {
+    alert("No event selected.");
+    return;
+  }
+
+  const { PDFDocument, StandardFonts } = window.pdfLib;
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const page = pdfDoc.addPage();
+  const { width, height } = page.getSize();
+  let y = height - 40;
+
+  const drawLine = (text, indent = 0, size = 12) => {
+    page.drawText(text, { x: 50 + indent, y, size, font });
+    y -= 18;
+  };
+
+  drawLine("Event Budget Report", 0, 14); y -= 10;
+  const lines = [
+    `Event Code: ${currentRecord.EventCode || ''}`,
+    `Name: ${currentRecord.Name || ''}`,
+    `Sport: ${currentRecord.Sport || ''}`,
+    `Discipline: ${currentRecord.Discipline || ''}`,
+    `Start Date: ${currentRecord.DateStart || ''}`,
+    `End Date: ${currentRecord.DateEnd || ''}`,
+    `City: ${currentRecord.CITY || ''}`,
+    `Venue: ${currentRecord.VENUE || ''}`,
+    `Level: ${currentRecord.LEVEL || ''}`,
+    `Pool Size: ${currentRecord.POOL_SIZE || ''}`,
+    `Organiser: ${currentRecord.Organiser || ''}`
+  ];
+  lines.forEach(line => drawLine(line));
+
+  y -= 10;
+  drawLine("Expenses by Category Group", 0, 13);
+  y -= 10;
+
+  const { records: expenses } = await grist.docApi.fetchTable('Expenses');
+  const { records: categories } = await grist.docApi.fetchTable('ExpenseCategory');
+
+  const eventExpenses = expenses.filter(e => e.Event === currentRecord.id);
+
+  const grouped = {};
+  for (const exp of eventExpenses) {
+    const cat = categories.find(c => c.id === exp.ExpenseCategory);
+    const group = cat?.GroupName || "Other";
+    const catName = cat?.Name || "Unnamed";
+
+    if (!grouped[group]) grouped[group] = {};
+    if (!grouped[group][catName]) grouped[group][catName] = [];
+    grouped[group][catName].push({ label: exp.Label || "", amount: exp.Amount || 0 });
+  }
+
+  let grandTotal = 0;
+  for (const group of Object.keys(grouped).sort()) {
+    drawLine(group, 0, 12);
+    let groupTotal = 0;
+
+    for (const cat of Object.keys(grouped[group])) {
+      drawLine(cat, 10);
+      for (const exp of grouped[group][cat]) {
+        drawLine(`${exp.label}: €${exp.amount.toFixed(2)}`, 20);
+        groupTotal += exp.amount;
+      }
+    }
+
+    drawLine(`Subtotal: €${groupTotal.toFixed(2)}`, 10);
+    y -= 6;
+    grandTotal += groupTotal;
+  }
+
+  y -= 10;
+  drawLine(`TOTAL EXPENSES: €${grandTotal.toFixed(2)}`, 0, 13);
+
+  const pdfBytes = await pdfDoc.save();
+  const blob = new Blob([pdfBytes], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `BudgetReport_${currentRecord.EventCode || "event"}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+</script>
 </body>
 </html>
