@@ -16,6 +16,7 @@
             justify-content: center;
             height: 100vh;
             box-sizing: border-box;
+            text-align: center; /* Center error messages */
         }
         .container {
             text-align: center;
@@ -60,12 +61,20 @@
             color: #555;
             min-height: 20px; /* To prevent layout shift */
         }
+        .error-message {
+            color: red;
+            background-color: #ffe0e0;
+            border: 1px solid red;
+            padding: 10px;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
     </style>
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <script src="https://unpkg.com/@gristlabs/grist-api/dist/grist-api.min.js"></script>
 </head>
 <body>
-    <div class="container">
+    <div class="container" id="widget-container">
         <h2>Event PDF Budget Report</h2>
         <p id="message">Select an event to generate a PDF report.</p>
         <button id="downloadPdfButton" style="display: none;">Download PDF Report</button>
@@ -73,7 +82,19 @@
     </div>
 
     <script>
-        console.log("[WIDGET] v4.2 Starting"); // Version updated
+        console.log("[WIDGET] v4.3 Starting"); // Version updated to 4.2
+
+        // --- Diagnostic Check ---
+        if (typeof grist === 'undefined') {
+            console.error("[WIDGET] CRITICAL ERROR: 'grist' object is not defined. Grist API script (grist-api.min.js) might not have loaded correctly or is blocked.");
+            const container = document.getElementById('widget-container');
+            if (container) {
+                container.innerHTML = '<div class="error-message">Error: Grist API not loaded. Please ensure the widget URL is correct and network access to `grist-api.min.js` (from unpkg.com) is allowed. Check your browser\'s Developer Console (F12) for network errors.</div>';
+            }
+            // Stop further script execution if Grist API is not available
+            throw new Error("Grist API not available. Cannot initialize widget.");
+        }
+        // --- End Diagnostic Check ---
 
         const { PDFDocument, rgb, StandardFonts } = PDFLib;
         const messageElement = document.getElementById('message');
@@ -82,24 +103,14 @@
         let currentRecord = null;
         let currentRecordId = null;
 
-        /**
-         * Formats a date object to 'YYYY-MM-DD'.
-         * @param {Date} date - The date object.
-         * @returns {string} Formatted date string.
-         */
         function formatDate(date) {
             if (!date) return 'N/A';
             const d = new Date(date);
-            // Grist dates can be numbers (timestamp or Excel serial) or ISO strings.
-            // Try to parse both. If it's a number, assume it's milliseconds if large,
-            // or Excel serial if smaller. The grist-api often converts dates to numbers.
             let dateValue;
             if (typeof date === 'number') {
                 dateValue = new Date(date);
-                if (date < 60000 && date > 0) { // Small numbers might indicate Excel serial dates
-                    // This is a rough heuristic. Grist's internal date representation can vary.
-                    // For true Excel serial: new Date(Date.UTC(1899, 11, 30) + date * 24 * 60 * 60 * 1000);
-                    // However, grist-api typically provides standard JS Date-compatible values.
+                if (date < 60000 && date > 0) {
+                    // This is a rough heuristic for Excel serial dates.
                 }
             } else if (typeof date === 'string') {
                 dateValue = new Date(date);
@@ -111,9 +122,6 @@
             return dateValue.toISOString().split('T')[0];
         }
 
-        /**
-         * Generates and downloads the PDF report for the current event.
-         */
         async function generatePdfReport() {
             if (!currentRecord) {
                 console.warn("[WIDGET] No record selected for PDF generation.");
@@ -156,7 +164,7 @@
                     size: 24,
                     color: rgb(0.17, 0.24, 0.31), // Dark blue-gray
                 });
-                y -= 40; // Space after title
+                y -= 40;
 
                 const addDetail = (label, value) => {
                     page.drawText(`${label}: `, {
@@ -166,10 +174,9 @@
                         size: 12,
                         color: rgb(0, 0, 0),
                     });
-                    // Calculate text width to position value
                     const labelWidth = boldFont.widthOfTextAtSize(`${label}: `, 12);
                     page.drawText(String(value || 'N/A'), {
-                        x: x + labelWidth + 5, // Adjust X for value, adding a small gap
+                        x: x + labelWidth + 5,
                         y,
                         font: font,
                         size: 12,
@@ -193,7 +200,6 @@
                 const pdfBytes = await pdfDoc.save();
                 const filename = `Event_Report_${$EventCode || 'Unknown'}.pdf`;
 
-                // Trigger download
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
@@ -201,7 +207,7 @@
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                URL.revokeObjectURL(link.href); // Clean up the URL object
+                URL.revokeObjectURL(link.href);
 
                 console.log(`[WIDGET] PDF generated and downloaded: ${filename}`);
 
