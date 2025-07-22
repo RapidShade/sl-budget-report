@@ -1,4 +1,7 @@
 {
-  "accessLevel": "full",
-  "requiredAccess": "full"
+  "name": "SL Budget Report Widget",
+  "version": "3.0",
+  "description": "Generates a PDF budget report for selected event",
+  "access": "full",
+  "optionalAccess": []
 }

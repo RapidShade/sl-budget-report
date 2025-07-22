@@ -1,16 +1,19 @@
-console.log("[WIDGET] v2.4 Starting...");
+console.log("[WIDGET] v3.0 Starting...");
 
-let current = null;
-let grist = null;
+window.addEventListener("message", async (event) => {
+  const grist = event.data.gristDocAPI;
+  if (!grist || !grist.ready) return;
 
-function initialize(g) {
-  grist = g;
-  grist.ready();
+  console.log("[WIDGET] Grist context received.");
+
+  await grist.ready();
+
+  let current = null;
+  const status = document.getElementById("status");
+  const button = document.getElementById("btn");
 
   grist.onRecord((rec) => {
     current = rec;
-    const status = document.getElementById("status");
-    const button = document.getElementById("btn");
     if (rec && rec.Name) {
       status.innerText = `Ready: ${rec.Name}`;
       button.disabled = false;
@@ -20,8 +23,8 @@ function initialize(g) {
     }
   });
 
-  document.getElementById("btn").addEventListener("click", async () => {
-    if (!current) {
+  button.addEventListener("click", async () => {
+    if (!current || !current.Name) {
       alert("No event selected.");
       return;
     }
@@ -48,7 +51,7 @@ function initialize(g) {
       `Organiser: ${current.Organiser || ''}`
     ];
 
-    let y = height - 40;
+    let y = height - 50;
     for (const line of lines) {
       page.drawText(line, { x: 50, y, size: 12, font });
       y -= 20;
@@ -63,14 +66,4 @@ function initialize(g) {
     a.click();
     URL.revokeObjectURL(url);
   });
-}
-
-if (window.grist) {
-  initialize(window.grist);
-} else {
-  window.addEventListener("message", (event) => {
-    if (event.data && event.data.gristDocAPI) {
-      initialize(event.data.gristDocAPI);
-    }
-  });
-}
+});
