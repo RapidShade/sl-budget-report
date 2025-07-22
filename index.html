@@ -214,58 +214,63 @@
             container.innerHTML = '<div class="error-message">Error: Grist API not loaded. Check console for details.</div>';
         }
         console.error("[WIDGET] 'grist' object is undefined. Cannot proceed with Grist API initialization.");
-    } else if (typeof grist.ready !== 'function') {
-        messageElement.textContent = "Error: grist.ready() is not a function. Grist API might be partially loaded or an older version.";
-        const container = document.getElementById('widget-container');
-        if (container) {
-            container.innerHTML = '<div class="error-message">Error: grist.ready() not a function. Check console for details.</div>';
-        }
-        console.error("[WIDGET] 'grist.ready' is not a function. Cannot proceed with Grist API initialization.");
     } else {
-        grist.ready().then(() => {
-            console.log("[WIDGET] Grist API is ready.");
-            messageElement.textContent = "Grist API connected. Select an event.";
-
-            // Request full access
-            grist.set.requestedPermissions({ requiredAccess: 'full' });
-
-            grist.on('record', (record, mappings) => {
-                currentRecord = record;
-                currentRecordId = record ? record.id : null;
-
-                console.log("[WIDGET] grist.onRecord triggered.");
-                console.log("[WIDGET] Current record data:", currentRecord);
-                console.log("[WIDGET] Current record ID:", currentRecordId);
-                console.log("[WIDGET] Mappings provided:", mappings);
-
-                if (currentRecord && Object.keys(currentRecord).length > 0) {
-                    messageElement.style.display = 'none';
-                    downloadPdfButton.style.display = 'block';
-                    recordInfoElement.textContent = `Selected Event: ${currentRecord.$Name || currentRecord.$EventCode || 'Unnamed Event'}`;
-                    downloadPdfButton.disabled = false;
-                    console.log("[WIDGET] Event record detected. Button enabled.");
-                } else {
-                    messageElement.style.display = 'block';
-                    downloadPdfButton.style.display = 'none';
-                    recordInfoElement.textContent = '';
-                    downloadPdfButton.disabled = true;
-                    console.log("[WIDGET] No event record selected. Button disabled.");
-                }
-            });
-
-            // Enable debug button once Grist API is ready
-            debugButton.disabled = false;
-            console.log("[WIDGET] Debug button enabled.");
-
-        }).catch(error => {
-            console.error("[WIDGET] Error initializing Grist API:", error);
-            messageElement.textContent = "Error connecting to Grist API. Check console for details.";
+    // Add a small delay for diagnostic purposes
+    setTimeout(() => {
+        if (typeof grist.ready !== 'function') {
+            messageElement.textContent = "Error: grist.ready() is not a function after delay. Grist API might be partially loaded or an older version.";
             const container = document.getElementById('widget-container');
             if (container) {
-                container.innerHTML = '<div class="error-message">Error with Grist API. Check console for details.</div>';
+                container.innerHTML = '<div class="error-message">Error: grist.ready() not a function. Check console for details.</div>';
             }
-        });
-    }
+            console.error("[WIDGET] 'grist.ready' is not a function after delay. Cannot proceed with Grist API initialization.");
+        } else {
+            grist.ready().then(() => {
+                console.log("[WIDGET] Grist API is ready.");
+                messageElement.textContent = "Grist API connected. Select an event.";
+
+                // Request full access
+                grist.set.requestedPermissions({ requiredAccess: 'full' });
+
+                grist.on('record', (record, mappings) => {
+                    currentRecord = record;
+                    currentRecordId = record ? record.id : null;
+
+                    console.log("[WIDGET] grist.onRecord triggered.");
+                    console.log("[WIDGET] Current record data:", currentRecord);
+                    console.log("[WIDGET] Current record ID:", currentRecordId);
+                    console.log("[WIDGET] Mappings provided:", mappings);
+
+                    if (currentRecord && Object.keys(currentRecord).length > 0) {
+                        messageElement.style.display = 'none';
+                        downloadPdfButton.style.display = 'block';
+                        recordInfoElement.textContent = `Selected Event: ${currentRecord.$Name || currentRecord.$EventCode || 'Unnamed Event'}`;
+                        downloadPdfButton.disabled = false;
+                        console.log("[WIDGET] Event record detected. Button enabled.");
+                    } else {
+                        messageElement.style.display = 'block';
+                        downloadPdfButton.style.display = 'none';
+                        recordInfoElement.textContent = '';
+                        downloadPdfButton.disabled = true;
+                        console.log("[WIDGET] No event record selected. Button disabled.");
+                    }
+                });
+
+                // Enable debug button once Grist API is ready
+                debugButton.disabled = false;
+                console.log("[WIDGET] Debug button enabled.");
+
+            }).catch(error => {
+                console.error("[WIDGET] Error initializing Grist API:", error);
+                messageElement.textContent = "Error connecting to Grist API. Check console for details.";
+                const container = document.getElementById('widget-container');
+                if (container) {
+                    container.innerHTML = '<div class="error-message">Error with Grist API. Check console for details.</div>';
+                }
+            });
+        }
+    }, 100); // 100ms delay
+}
     // --- END CORRECT GRIST API INITIALIZATION ---
 
 
