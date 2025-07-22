@@ -1,36 +1,30 @@
-console.log("[WIDGET] v0.8 Starting PDF widget (postMessage fallback)");
+console.log("[WIDGET] v1.1 Starting...");
 
+let gristDoc = null;
 let selectedEvent = null;
 let expenses = [];
 let categories = {};
-let docApi = null;
 
-window.addEventListener("message", (event) => {
-  if (event.data && event.data.gristDocAPI && !docApi) {
-    console.log("[WIDGET] Injected docApi from Grist");
-    docApi = event.data.gristDocAPI;
-    docApi.subscribeRecords("Events", {}, onEventSelected);
-  }
+window.grist.ready({ requiredAccess: "read table" }).then(api => {
+  gristDoc = api;
+
+  gristDoc.onRecord(async (record) => {
+    if (!record || !record.id) {
+      selectedEvent = null;
+      document.getElementById("status").textContent = "⚠️ Select an event.";
+      return;
+    }
+
+    selectedEvent = record;
+    document.getElementById("status").textContent = "✅ Selected Event: " + (record.Title || '[Untitled]');
+    await loadData();
+  });
 });
-
-function onEventSelected(data) {
-  if (!data || !data.length || !data[0].fields) {
-    document.getElementById('status').textContent = "⚠️ No event selected.";
-    selectedEvent = null;
-    return;
-  }
-  selectedEvent = data[0];
-  console.log("[WIDGET] Selected Event:", selectedEvent);
-  document.getElementById('status').textContent = "✅ Selected Event: " + (selectedEvent.fields.Title || '[Untitled]');
-  loadData();
-}
 
 async function loadData() {
   try {
-    const [expensesTable, categoryTable] = await Promise.all([
-      docApi.fetchTable('Expenses'),
-      docApi.fetchTable('ExpenseCategories')
-    ]);
+    const expensesTable = await gristDoc.docApi.fetchTable("Expenses");
+    const categoryTable = await gristDoc.docApi.fetchTable("ExpenseCategories");
 
     categories = {};
     for (const cat of categoryTable.records) {
@@ -38,17 +32,16 @@ async function loadData() {
     }
 
     expenses = expensesTable.records
-      .filter(exp => exp.fields.Event === selectedEvent.id)
-      .map(exp => ({
-        title: exp.fields.Title || "",
-        amount: exp.fields.Amount || 0,
-        category: categories[exp.fields.ExpenseCategory] || "Χωρίς Κατηγορία"
+      .filter(r => r.fields.Event === selectedEvent.id)
+      .map(r => ({
+        title: r.fields.Title || '',
+        amount: r.fields.Amount || 0,
+        category: categories[r.fields.ExpenseCategory] || 'Χωρίς Κατηγορία'
       }));
 
-    console.log("[WIDGET] Loaded expenses:", expenses.length);
+    console.log("[WIDGET] Expenses loaded:", expenses.length);
   } catch (e) {
-    console.error("[WIDGET] Failed to load data:", e);
-    document.getElementById('status').textContent = "❌ Error loading tables.";
+    console.error("[WIDGET] Error loading tables:", e);
   }
 }
 
@@ -58,42 +51,40 @@ function generatePDF() {
     return;
   }
 
-  console.log("[WIDGET] Generating PDF...");
-
-  const grouped = {};
-  for (const exp of expenses) {
-    if (!grouped[exp.category]) grouped[exp.category] = [];
-    grouped[exp.category].push(exp);
-  }
-
   const content = [
-    { text: 'Αναφορά Εκδήλωσης', style: 'header' },
-    { text: selectedEvent.fields.Title || '', margin: [0, 0, 0, 10] }
+    { text: "ΑΝΑΦΟΡΑ ΕΚΔΗΛΩΣΗΣ", style: "header" },
+    { text: selectedEvent.Title || "—", margin: [0, 0, 0, 10] },
+    { text: `Τοποθεσία: ${selectedEvent.VENUE || "-"}, Πόλη: ${selectedEvent.CITY || "-"}, Περιφ.: ${selectedEvent.PERIF_CITY || "-"}`, margin: [0, 0, 0, 10] },
+    { text: `POOL SIZE: ${selectedEvent.POOL_SIZE || "-"}m | LEVEL: ${selectedEvent.LEVEL || "-"}`, margin: [0, 0, 0, 20] }
   ];
 
-  for (const [category, rows] of Object.entries(grouped)) {
-    content.push({ text: category, style: 'subheader' });
-    const tableBody = [['Περιγραφή', 'Ποσό (€)']];
-    let subtotal = 0;
-    for (const row of rows) {
-      tableBody.push([row.title, row.amount.toFixed(2)]);
-      subtotal += row.amount;
-    }
-    tableBody.push([{ text: 'Σύνολο', bold: true }, { text: subtotal.toFixed(2), bold: true }]);
-    content.push({ table: { widths: ['*', 100], body: tableBody }, margin: [0, 0, 0, 10] });
+  const grouped = {};
+  for (const e of expenses) {
+    if (!grouped[e.category]) grouped[e.category] = [];
+    grouped[e.category].push(e);
   }
 
-  const total = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-  content.push({ text: 'Γενικό Σύνολο: ' + total.toFixed(2) + ' €', bold: true, fontSize: 14 });
+  for (const [cat, items] of Object.entries(grouped)) {
+    content.push({ text: cat, style: "subheader" });
+    const rows = [["Περιγραφή", "Ποσό (€)"]];
+    let subtotal = 0;
+    for (const i of items) {
+      rows.push([i.title, i.amount.toFixed(2)]);
+      subtotal += i.amount;
+    }
+    rows.push([{ text: "Σύνολο", bold: true }, { text: subtotal.toFixed(2), bold: true }]);
+    content.push({ table: { widths: ["*", 80], body: rows }, margin: [0, 0, 0, 15] });
+  }
 
-  const docDefinition = {
+  const total = expenses.reduce((sum, e) => sum + e.amount, 0);
+  content.push({ text: "ΓΕΝΙΚΟ ΣΥΝΟΛΟ: " + total.toFixed(2) + " €", style: "total" });
+
+  pdfMake.createPdf({
     content,
     styles: {
-      header: { fontSize: 18, bold: true },
-      subheader: { fontSize: 14, bold: true, margin: [0, 10, 0, 4] }
+      header: { fontSize: 18, bold: true, alignment: 'center', margin: [0, 0, 0, 10] },
+      subheader: { fontSize: 14, bold: true, margin: [0, 10, 0, 5] },
+      total: { fontSize: 14, bold: true, alignment: 'right', margin: [0, 10, 0, 0] }
     }
-  };
-
-  const filename = (selectedEvent.fields.Title || 'report') + '.pdf';
-  pdfMake.createPdf(docDefinition).download(filename);
+  }).download((selectedEvent.Title || "event_report") + ".pdf");
 }
