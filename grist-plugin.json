@@ -1,6 +1,6 @@
 {
   "name": "SL Budget Report Widget",
-  "version": "3.0",
+  "version": "4.0",
   "description": "Generates a PDF budget report for selected event",
   "access": "full",
   "optionalAccess": []

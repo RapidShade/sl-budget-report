@@ -1,14 +1,19 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8" />
-  <title>PDF Export Widget</title>
-  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
-  <script src="widget.js"></script>
-  <link rel="stylesheet" href="style.css">
+    <title>Event PDF Budget Report Widget</title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    <script src="https://unpkg.com/@gristlabs/grist-api/dist/grist-api.min.js"></script>
 </head>
 <body>
-  <div id="status">Waiting for Grist...</div>
-  <button id="btn" disabled>Download PDF</button>
+    <div class="container">
+        <h2>Event PDF Budget Report</h2>
+        <p id="message">Select an event to generate a PDF report.</p>
+        <button id="downloadPdfButton" style="display: none;">Download PDF Report</button>
+        <div id="record-info"></div>
+    </div>
+    <script src="script.js"></script>
 </body>
 </html>
