@@ -83,7 +83,7 @@
     </div>
 
     <script>
-        console.log("[WIDGET] v4.10 Starting"); // Version updated to 4.10
+        console.log("[WIDGET] v4.11 Starting (Diagnostic Version)"); // Version updated to 4.11
 
         // --- Diagnostic Check ---
         if (typeof grist === 'undefined') {
@@ -216,45 +216,41 @@
             }
         }
 
+        console.log("[WIDGET] Type of grist.ready before calling it:", typeof grist.ready);
+        console.log("[WIDGET] Full grist object:", grist);
+
         // Grist API initialization: Request full access
+        // Temporarily change from .then() to direct call for diagnosis
         grist.ready({
             requiredAccess: 'full'
-        }).then(() => {
-            console.log("[WIDGET] Grist API is fully ready.");
+        }); // Removed .then() for this diagnostic version
 
-            // Register the onRecord handler now that Grist is ready
-            grist.on('record', (record, mappings) => {
-                currentRecord = record;
-                currentRecordId = record ? record.id : null;
+        // Register the onRecord handler separately (as in v4.9, for now, to isolate .then() issue)
+        grist.on('record', (record, mappings) => {
+            currentRecord = record;
+            currentRecordId = record ? record.id : null;
 
-                console.log("[WIDGET] grist.onRecord triggered.");
-                console.log("[WIDGET] Current record data:", currentRecord);
-                console.log("[WIDGET] Current record ID:", currentRecordId);
-                console.log("[WIDGET] Mappings provided:", mappings);
+            console.log("[WIDGET] grist.onRecord triggered.");
+            console.log("[WIDGET] Current record data:", currentRecord);
+            console.log("[WIDGET] Current record ID:", currentRecordId);
+            console.log("[WIDGET] Mappings provided:", mappings);
 
-                if (currentRecord && Object.keys(currentRecord).length > 0) {
-                    messageElement.style.display = 'none';
-                    downloadPdfButton.style.display = 'block';
-                    recordInfoElement.textContent = `Selected Event: ${currentRecord.$Name || currentRecord.$EventCode || 'Unnamed Event'}`;
-                    downloadPdfButton.disabled = false;
-                    console.log("[WIDGET] Event record detected. Button enabled.");
-                } else {
-                    messageElement.style.display = 'block';
-                    downloadPdfButton.style.display = 'none';
-                    recordInfoElement.textContent = '';
-                    downloadPdfButton.disabled = true;
-                    console.log("[WIDGET] No event record selected. Button disabled.");
-                }
-            });
-
-            console.log("[WIDGET] Grist API ready callback registered and event listener set up.");
-        }).catch(error => {
-            console.error("[WIDGET] Error during Grist API ready initialization:", error);
-            const container = document.getElementById('widget-container');
-            if (container) {
-                container.innerHTML = '<div class="error-message">Error initializing Grist API. Check console.</div>';
+            if (currentRecord && Object.keys(currentRecord).length > 0) {
+                messageElement.style.display = 'none';
+                downloadPdfButton.style.display = 'block';
+                recordInfoElement.textContent = `Selected Event: ${currentRecord.$Name || currentRecord.$EventCode || 'Unnamed Event'}`;
+                downloadPdfButton.disabled = false;
+                console.log("[WIDGET] Event record detected. Button enabled.");
+            } else {
+                messageElement.style.display = 'block';
+                downloadPdfButton.style.display = 'none';
+                recordInfoElement.textContent = '';
+                downloadPdfButton.disabled = true;
+                console.log("[WIDGET] No event record selected. Button disabled.");
             }
         });
+
+        console.log("[WIDGET] Grist API ready call and event listener setup complete (check logs for onRecord trigger).");
 
 
         // Event listener for the new debug button
