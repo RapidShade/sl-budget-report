@@ -1,11 +1,9 @@
-let gristDoc;
+let gristDoc = null;
 let selectedEvent = null;
 let expenses = [];
 let categories = {};
-let gristDoc = null;
-let selectedEvent = null;
 
-console.log("[WIDGET] Starting PDF widget…");
+console.log("[WIDGET] v0.1 Starting PDF widget…");
 
 window.grist.ready({ requiredAccess: 'read table' }).then(api => {
   console.log("[WIDGET] Grist API ready");
