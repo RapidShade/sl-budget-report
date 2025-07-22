@@ -1,9 +1,10 @@
 {
   "name": "Event Report PDF Generator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Generates a grouped PDF report from Expenses for a selected Event.",
   "author": "ChatGPT",
   "homepage": "",
+  "access": "read table",
   "widgetConfig": {
     "requiredTables": ["Events", "Expenses", "ExpenseCategories"],
     "optionalTables": [],
