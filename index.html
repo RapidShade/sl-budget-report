@@ -10,6 +10,12 @@
 <body>
   <button onclick="generatePDF()">Download PDF</button>
   <div id="status">Widget loaded, waiting for event selection…</div>
-  <script src="widget.js"></script>
+  <script>
+    window.addEventListener("load", () => {
+      const script = document.createElement("script");
+      script.src = "widget.js";
+      document.body.appendChild(script);
+    });
+  </script>
 </body>
 </html>
