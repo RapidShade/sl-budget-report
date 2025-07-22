@@ -1,52 +1,64 @@
+console.log("[WIDGET] v0.2 Starting PDF widget...");
+
 let gristDoc = null;
 let selectedEvent = null;
 let expenses = [];
 let categories = {};
-
-console.log("[WIDGET] v0.1 Starting PDF widget…");
 
 window.grist.ready({ requiredAccess: 'read table' }).then(api => {
   console.log("[WIDGET] Grist API ready");
   gristDoc = api;
 
   if (!gristDoc || !gristDoc.docApi) {
-    console.error("[WIDGET] No docApi — check permissions or access level.");
-    document.getElementById('status').textContent = "❌ Widget failed to initialize. No access.";
+    console.error("[WIDGET] ❌ Grist API or docApi not available. Check access level.");
+    document.getElementById('status').textContent = "❌ No access to Grist document.";
     return;
   }
 
   gristDoc.onRecord((record) => {
     if (!record) {
-      console.warn("[WIDGET] No record selected.");
+      console.warn("[WIDGET] No event record selected.");
+      document.getElementById('status').textContent = "⚠️ Select an event to generate report.";
       return;
     }
 
     selectedEvent = record;
+    document.getElementById('status').textContent = '✅ Selected Event: ' + (record.Title || '[Untitled]');
     console.log("[WIDGET] Selected event:", selectedEvent);
-    document.getElementById('status').textContent = 'Selected Event: ' + (record.Title || '[Untitled]');
     loadData();
   });
 });
 
 async function loadData() {
-  const expensesTable = await gristDoc.docApi.fetchTable('Expenses');
-  const categoryTable = await gristDoc.docApi.fetchTable('ExpenseCategories');
-  categories = {};
-  categoryTable.records.forEach(cat => {
-    categories[cat.id] = cat.fields.Name;
-  });
+  try {
+    const expensesTable = await gristDoc.docApi.fetchTable('Expenses');
+    const categoryTable = await gristDoc.docApi.fetchTable('ExpenseCategories');
 
-  expenses = expensesTable.records.filter(exp => {
-    return exp.fields.Event === selectedEvent.id;
-  }).map(exp => ({
-    title: exp.fields.Title,
-    amount: exp.fields.Amount,
-    category: categories[exp.fields.ExpenseCategory] || 'Χωρίς Κατηγορία'
-  }));
+    categories = {};
+    for (let cat of categoryTable.records) {
+      categories[cat.id] = cat.fields.Name;
+    }
+
+    expenses = expensesTable.records.filter(exp => exp.fields.Event === selectedEvent.id).map(exp => ({
+      title: exp.fields.Title || "",
+      amount: exp.fields.Amount || 0,
+      category: categories[exp.fields.ExpenseCategory] || "Χωρίς Κατηγορία"
+    }));
+
+    console.log("[WIDGET] Loaded expenses:", expenses.length);
+  } catch (e) {
+    console.error("[WIDGET] Error loading data:", e);
+    document.getElementById('status').textContent = "❌ Failed to load data.";
+  }
 }
 
 function generatePDF() {
-  if (!selectedEvent) return;
+  if (!selectedEvent) {
+    alert("Select an event first.");
+    return;
+  }
+
+  console.log("[WIDGET] Generating PDF...");
 
   const grouped = {};
   for (const exp of expenses) {
@@ -64,7 +76,7 @@ function generatePDF() {
     let subtotal = 0;
     for (const row of rows) {
       tableBody.push([row.title, row.amount.toFixed(2)]);
-      subtotal += row.amount || 0;
+      subtotal += row.amount;
     }
     tableBody.push([{ text: 'Σύνολο', bold: true }, { text: subtotal.toFixed(2), bold: true }]);
     content.push({ table: { widths: ['*', 100], body: tableBody }, margin: [0, 0, 0, 10] });
@@ -80,5 +92,7 @@ function generatePDF() {
       subheader: { fontSize: 14, bold: true, margin: [0, 10, 0, 4] }
     }
   };
-  pdfMake.createPdf(docDefinition).download((selectedEvent.Title || 'report') + '.pdf');
+
+  const filename = (selectedEvent.Title || 'report') + '.pdf';
+  pdfMake.createPdf(docDefinition).download(filename);
 }
