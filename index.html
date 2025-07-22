@@ -174,4 +174,120 @@
                         color: rgb(0, 0, 0),
                     });
                     const labelWidth = boldFont.widthOfTextAtSize(`${label}: `, 12);
-                    page.drawText(String(value || '
+                    page.drawText(String(value || 'N/A'), {
+                        x: x + labelWidth + 5,
+                        y,
+                        font: font,
+                        size: 12,
+                        color: rgb(0, 0, 0),
+                    });
+                    y -= lineHeight;
+                };
+
+                addDetail('Event Code', $EventCode);
+                addDetail('Name', $Name);
+                addDetail('Sport', $Sport);
+                addDetail('Discipline', $Discipline);
+                addDetail('Start Date', startDateFormatted);
+                addDetail('End Date', endDateFormatted);
+                addDetail('CITY', $CITY);
+                addDetail('VENUE', $VENUE);
+                addDetail('LEVEL', $LEVEL);
+                addDetail('POOL_SIZE', $POOL_SIZE);
+                addDetail('Organiser', $Organiser);
+
+                const pdfBytes = await pdfDoc.save();
+                const filename = `Event_Report_${$EventCode || 'Unknown'}.pdf`;
+
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(link.href);
+
+                console.log(`[WIDGET] PDF generated and downloaded: ${filename}`);
+
+            } catch (error) {
+                console.error("[WIDGET] Error generating PDF:", error);
+                alert("Failed to generate PDF report. Check your browser's console for details.");
+            }
+        }
+
+        // Grist API initialization: Request full access
+        grist.ready({
+            requiredAccess: 'full'
+        });
+
+        // Register the onRecord handler separately
+        grist.on('record', (record, mappings) => {
+            currentRecord = record;
+            currentRecordId = record ? record.id : null;
+
+            console.log("[WIDGET] grist.onRecord triggered.");
+            console.log("[WIDGET] Current record data:", currentRecord);
+            console.log("[WIDGET] Current record ID:", currentRecordId);
+            console.log("[WIDGET] Mappings provided:", mappings);
+
+            if (currentRecord && Object.keys(currentRecord).length > 0) {
+                messageElement.style.display = 'none';
+                downloadPdfButton.style.display = 'block';
+                recordInfoElement.textContent = `Selected Event: ${currentRecord.$Name || currentRecord.$EventCode || 'Unnamed Event'}`;
+                downloadPdfButton.disabled = false;
+                console.log("[WIDGET] Event record detected. Button enabled.");
+            } else {
+                messageElement.style.display = 'block';
+                downloadPdfButton.style.display = 'none';
+                recordInfoElement.textContent = '';
+                downloadPdfButton.disabled = true;
+                console.log("[WIDGET] No event record selected. Button disabled.");
+            }
+        });
+
+        // Event listener for the new debug button
+        debugButton.addEventListener('click', async () => {
+            console.log("[WIDGET] Debug Button clicked. Attempting to fetch selected record directly.");
+            try {
+                // Fetch current view section ID
+                const viewSectionId = await grist.doc.get.currentViewSectionId();
+                console.log("[WIDGET] Current View Section ID:", viewSectionId);
+
+                // Fetch current view section details
+                const viewSection = await grist.doc.get.currentViewSection();
+                console.log("[WIDGET] Current View Section Details:", viewSection);
+
+                // Fetch the selected record
+                const fetchedRecord = await grist.doc.fetchSelectedRecord();
+                console.log("[WIDGET] grist.doc.fetchSelectedRecord() result:", fetchedRecord);
+
+                if (fetchedRecord && Object.keys(fetchedRecord).length > 0) {
+                    messageElement.style.display = 'none';
+                    downloadPdfButton.style.display = 'block';
+                    recordInfoElement.textContent = `Manually Fetched Event: ${fetchedRecord.$Name || fetchedRecord.$EventCode || 'Unnamed Event'}`;
+                    downloadPdfButton.disabled = false;
+                    currentRecord = fetchedRecord; // Update currentRecord for PDF generation
+                    currentRecordId = fetchedRecord.id;
+                    console.log("[WIDGET] Manually fetched record data. Button enabled.");
+                } else {
+                    messageElement.style.display = 'block';
+                    downloadPdfButton.style.display = 'none';
+                    recordInfoElement.textContent = 'No record fetched by debug button.';
+                    downloadPdfButton.disabled = true;
+                    console.log("[WIDGET] No record fetched by debug button. Button disabled.");
+                }
+
+            } catch (error) {
+                console.error("[WIDGET] Error fetching record via debug button:", error);
+                recordInfoElement.textContent = 'Error fetching record via debug button. Check console.';
+            }
+        });
+
+        // Attach event listener to the download button
+        downloadPdfButton.addEventListener('click', generatePdfReport);
+
+        console.log("[WIDGET] Grist API ready callback registered and event listener set up.");
+    </script>
+</body>
+</html>
