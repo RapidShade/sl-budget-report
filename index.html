@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Event Report PDF Generator</title>
-  <script src="https://unpkg.com/pdfmake@0.2.7/build/pdfmake.min.js"></script>
-  <script src="https://unpkg.com/pdfmake@0.2.7/build/vfs_fonts.js"></script>
+  <meta charset="utf-8">
+  <title>Event PDF Generator</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
 </head>
 <body>
-  <h2>📄 Event PDF Report Generator</h2>
-  <p id="status">Widget loaded. Waiting for event selection...</p>
-  <button onclick="generatePDF()">Download PDF</button>
+  <h3>📰 Event PDF Report</h3>
+  <div id="status">Waiting for event selection…</div>
+  <button id="btn" disabled>Download PDF</button>
+
   <script src="widget.js"></script>
 </body>
 </html>
