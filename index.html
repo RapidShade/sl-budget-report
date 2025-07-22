@@ -85,7 +85,7 @@
     </div>
 
     <script>
-        console.log("[WIDGET] v4.21 Starting (Direct Insertion)");
+        console.log("[WIDGET] v4.22 Starting (Fixing fetchTable undefined)");
 
         // Ensure pdf-lib and fontkit are loaded
         if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
@@ -99,8 +99,14 @@
         const debugButton = document.getElementById('debugButton');
         const recordInfoElement = document.getElementById('record-info');
         let currentRecord = null;
-        let currentRecordId = null; // New: to store the ID of the current record
-        let expenseCategoriesMap = new Map(); // New: to cache expense categories
+        let currentRecordId = null;
+        let expenseCategoriesMap = new Map();
+
+        // New: Promise to signal when grist.doc is ready for use
+        let resolveGristDocReady;
+        const gristDocReadyPromise = new Promise(resolve => {
+            resolveGristDocReady = resolve;
+        });
 
         /**
          * Formats a date value (timestamp or string) into YYYY-MM-DD format.
@@ -132,16 +138,22 @@
          */
         function updateUI(record) {
             currentRecord = record;
-            currentRecordId = record ? record.id : null; // Set currentRecordId here
+            currentRecordId = record ? record.id : null;
 
             console.log("[WIDGET] updateUI triggered. Record:", currentRecord);
+
+            // New: Resolve the promise when grist.doc is confirmed available
+            // This is crucial for fixing the TypeError: Cannot read properties of undefined (reading 'fetchTable')
+            if (typeof grist !== 'undefined' && typeof grist.doc !== 'undefined') {
+                resolveGristDocReady();
+                console.log("[WIDGET] grist.doc confirmed ready.");
+            }
 
             if (record && Object.keys(record).length > 0 && record.id) {
                 console.log("[WIDGET] Record selected:", record);
                 messageElement.style.display = 'none';
                 downloadPdfButton.style.display = 'inline-block';
                 downloadPdfButton.disabled = false;
-                // Use $Name if available for robustness, otherwise Name
                 recordInfoElement.textContent = `Selected: ${record.$Name || record.Name || record.EventCode || 'Unnamed Event'}`;
             } else {
                 console.log("[WIDGET] No record selected.");
@@ -160,19 +172,22 @@
          * Called once during initialization.
          */
         async function initGristData() {
+            // New: Wait for grist.doc to be ready before fetching data
+            await gristDocReadyPromise;
+            console.log("[WIDGET] initGristData: grist.doc is ready. Proceeding to fetch categories.");
+
             try {
-                // Fetch and cache Expense Categories once
                 const allExpenseCategories = await grist.doc.fetchTable('ExpenseCategory');
                 allExpenseCategories.forEach(cat => {
                     expenseCategoriesMap.set(cat.id, {
-                        groupName: cat.$GroupName, // Use $GroupName as per Grist's fetched data
-                        displayOrder: cat.$DisplayOrder, // Use $DisplayOrder
-                        name: cat.$Name // Use $Name
+                        groupName: cat.$GroupName,
+                        displayOrder: cat.$DisplayOrder,
+                        name: cat.$Name
                     });
                 });
                 console.log("[WIDGET] Expense Categories fetched and cached.");
             } catch (error) {
-                console.error("[WIDGET] Error fetching ExpenseCategory table:", error);
+                console.error("[WIDGET] Error fetching ExpenseCategory table in initGristData:", error);
                 recordInfoElement.textContent = "Error fetching expense categories. Check console.";
             }
         }
@@ -187,6 +202,10 @@
                 alert("Please select an event record first.");
                 return;
             }
+
+            // New: Wait for grist.doc to be ready before fetching expenses
+            await gristDocReadyPromise;
+            console.log("[WIDGET] generatePdfReport: grist.doc is ready. Proceeding to fetch expenses.");
 
             console.log("[WIDGET] Generating PDF for record ID:", currentRecordId, "with data:", currentRecord);
             downloadPdfButton.disabled = true;
@@ -456,6 +475,10 @@
         debugButton.addEventListener('click', async () => {
             console.log("[WIDGET] Debug: Attempting to fetch selected record manually.");
             try {
+                // Wait for grist.doc to be ready before fetching
+                await gristDocReadyPromise;
+                console.log("[WIDGET] Debug: grist.doc is ready. Proceeding to fetch selected record.");
+
                 // Use the modern grist.fetchSelectedRecord() function
                 const record = await grist.fetchSelectedRecord();
                 if (record) {
@@ -478,6 +501,7 @@
         debugButton.disabled = false;
 
         // Initialize Grist data (like expense categories) after initial setup
+        // This will now wait for gristDocReadyPromise internally
         initGristData();
         console.log("[WIDGET] initGristData() called for initial data fetch.");
 
