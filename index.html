@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+            font-family: -apple-system, BlinkMacMacFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
             color: #333;
             margin: 0;
             padding: 20px;
@@ -82,14 +82,14 @@
     </div>
 
     <script>
-        console.log("[WIDGET] v4.3 Starting"); // Version updated to 4.2
+        console.log("[WIDGET] v4.4 Starting"); // Version updated to 4.4
 
         // --- Diagnostic Check ---
         if (typeof grist === 'undefined') {
             console.error("[WIDGET] CRITICAL ERROR: 'grist' object is not defined. Grist API script (grist-api.min.js) might not have loaded correctly or is blocked.");
             const container = document.getElementById('widget-container');
             if (container) {
-                container.innerHTML = '<div class="error-message">Error: Grist API not loaded. Please ensure the widget URL is correct and network access to `grist-api.min.js` (from unpkg.com) is allowed. Check your browser\'s Developer Console (F12) for network errors.</div>';
+                container.innerHTML = '<div class="error-message">Error: Grist API not loaded. Please ensure the widget URL is correct and network access to `grist-api.min.js` (from unpkg.com) is allowed. Check your browser\'s Developer Console (F12) & Network Tab for errors.</div>';
             }
             // Stop further script execution if Grist API is not available
             throw new Error("Grist API not available. Cannot initialize widget.");
