@@ -72,7 +72,7 @@
         }
     </style>
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
-    <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+    <script src="/grist-plugin-api.js"></script>
 </head>
 <body>
     <div class="container" id="widget-container">
@@ -83,244 +83,243 @@
         <div id="record-info"></div>
     </div>
 
-<script>
-    console.log("[WIDGET] v4.16b Starting");
+    <script>
+        console.log("[WIDGET] v4.16c Starting"); // Version updated for tracking
 
-    const { PDFDocument, rgb, StandardFonts } = PDFLib;
-    const messageElement = document.getElementById('message');
-    const downloadPdfButton = document.getElementById('downloadPdfButton');
-    const debugButton = document.getElementById('debugButton');
-    const recordInfoElement = document.getElementById('record-info');
-    let currentRecord = null;
-    let currentRecordId = null;
+        const { PDFDocument, rgb, StandardFonts } = PDFLib;
+        const messageElement = document.getElementById('message');
+        const downloadPdfButton = document.getElementById('downloadPdfButton');
+        const debugButton = document.getElementById('debugButton');
+        const recordInfoElement = document.getElementById('record-info');
+        let currentRecord = null;
+        let currentRecordId = null;
 
-    function formatDate(date) {
-        if (!date) return 'N/A';
-        const d = new Date(date);
-        let dateValue;
-        if (typeof date === 'number') {
-            dateValue = new Date(date);
-        } else if (typeof date === 'string') {
-            dateValue = new Date(date);
-        } else {
-            return 'N/A';
+        function formatDate(date) {
+            if (!date) return 'N/A';
+            const d = new Date(date);
+            let dateValue;
+            if (typeof date === 'number') {
+                dateValue = new Date(date);
+            } else if (typeof date === 'string') {
+                dateValue = new Date(date);
+            } else {
+                return 'N/A';
+            }
+
+            if (isNaN(dateValue.getTime())) return 'Invalid Date';
+            return dateValue.toISOString().split('T')[0];
         }
 
-        if (isNaN(dateValue.getTime())) return 'Invalid Date';
-        return dateValue.toISOString().split('T')[0];
-    }
+        async function generatePdfReport() {
+            if (!currentRecord) {
+                console.warn("[WIDGET] No record selected for PDF generation.");
+                return;
+            }
 
-    async function generatePdfReport() {
-        if (!currentRecord) {
-            console.warn("[WIDGET] No record selected for PDF generation.");
-            return;
-        }
+            console.log("[WIDGET] Attempting to generate PDF for record ID:", currentRecordId, "with data:", currentRecord);
 
-        console.log("[WIDGET] Attempting to generate PDF for record ID:", currentRecordId, "with data:", currentRecord);
+            try {
+                const pdfDoc = await PDFDocument.create();
+                const page = pdfDoc.addPage();
+                const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-        try {
-            const pdfDoc = await PDFDocument.create();
-            const page = pdfDoc.addPage();
-            const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-            const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+                const {
+                    $EventCode,
+                    $Name,
+                    $Sport,
+                    $Discipline,
+                    $DateStart,
+                    $DateEnd,
+                    $CITY,
+                    $VENUE,
+                    $LEVEL,
+                    $POOL_SIZE,
+                    $Organiser
+                } = currentRecord;
 
-            const {
-                $EventCode,
-                $Name,
-                $Sport,
-                $Discipline,
-                $DateStart,
-                $DateEnd,
-                $CITY,
-                $VENUE,
-                $LEVEL,
-                $POOL_SIZE,
-                $Organiser
-            } = currentRecord;
+                const startDateFormatted = formatDate($DateStart);
+                const endDateFormatted = formatDate($DateEnd);
 
-            const startDateFormatted = formatDate($DateStart);
-            const endDateFormatted = formatDate($DateEnd);
+                let y = 750;
+                const x = 50;
+                const lineHeight = 20;
 
-            let y = 750;
-            const x = 50;
-            const lineHeight = 20;
-
-            page.drawText('Event Report', {
-                x,
-                y,
-                font: boldFont,
-                size: 24,
-                color: rgb(0.17, 0.24, 0.31),
-            });
-            y -= 40;
-
-            const addDetail = (label, value) => {
-                page.drawText(`${label}: `, {
+                page.drawText('Event Report', {
                     x,
                     y,
                     font: boldFont,
-                    size: 12,
-                    color: rgb(0, 0, 0),
+                    size: 24,
+                    color: rgb(0.17, 0.24, 0.31),
                 });
-                const labelWidth = boldFont.widthOfTextAtSize(`${label}: `, 12);
-                page.drawText(String(value || 'N/A'), {
-                    x: x + labelWidth + 5,
-                    y,
-                    font: font,
-                    size: 12,
-                    color: rgb(0, 0, 0),
-                });
-                y -= lineHeight;
-            };
+                y -= 40;
 
-            addDetail('Event Code', $EventCode);
-            addDetail('Name', $Name);
-            addDetail('Sport', $Sport);
-            addDetail('Discipline', $Discipline);
-            addDetail('Start Date', startDateFormatted);
-            addDetail('End Date', endDateFormatted);
-            addDetail('CITY', $CITY);
-            addDetail('VENUE', $VENUE);
-            addDetail('LEVEL', $LEVEL);
-            addDetail('POOL_SIZE', $POOL_SIZE);
-            addDetail('Organiser', $Organiser);
+                const addDetail = (label, value) => {
+                    page.drawText(`${label}: `, {
+                        x,
+                        y,
+                        font: boldFont,
+                        size: 12,
+                        color: rgb(0, 0, 0),
+                    });
+                    const labelWidth = boldFont.widthOfTextAtSize(`${label}: `, 12);
+                    page.drawText(String(value || 'N/A'), {
+                        x: x + labelWidth + 5,
+                        y,
+                        font: font,
+                        size: 12,
+                        color: rgb(0, 0, 0),
+                    });
+                    y -= lineHeight;
+                };
 
-            const pdfBytes = await pdfDoc.save();
-            const filename = `Event_Report_${$EventCode || 'Unknown'}.pdf`;
+                addDetail('Event Code', $EventCode);
+                addDetail('Name', $Name);
+                addDetail('Sport', $Sport);
+                addDetail('Discipline', $Discipline);
+                addDetail('Start Date', startDateFormatted);
+                addDetail('End Date', endDateFormatted);
+                addDetail('CITY', $CITY);
+                addDetail('VENUE', $VENUE);
+                addDetail('LEVEL', $LEVEL);
+                addDetail('POOL_SIZE', $POOL_SIZE);
+                addDetail('Organiser', $Organiser);
 
-            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(link.href);
+                const pdfBytes = await pdfDoc.save();
+                const filename = `Event_Report_${$EventCode || 'Unknown'}.pdf`;
 
-            console.log(`[WIDGET] PDF generated and downloaded: ${filename}`);
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(link.href);
 
-        } catch (error) {
-            console.error("[WIDGET] Error generating PDF:", error);
-            alert("Failed to generate PDF report. Check your browser's console for details.");
-        }
-    }
+                console.log(`[WIDGET] PDF generated and downloaded: ${filename}`);
 
-    // --- CORRECT GRIST API INITIALIZATION WITH DIAGNOSTICS ---
-    console.log("[WIDGET] Checking grist object:", typeof grist);
-    if (typeof grist === 'undefined') {
-        messageElement.textContent = "Error: Grist API is not loaded. Ensure the widget is running in Grist.";
-        const container = document.getElementById('widget-container');
-        if (container) {
-            container.innerHTML = '<div class="error-message">Error: Grist API not loaded. Check console for details.</div>';
-        }
-        console.error("[WIDGET] 'grist' object is undefined. Cannot proceed with Grist API initialization.");
-    } else {
-    // Add a small delay for diagnostic purposes
-    setTimeout(() => {
-        if (typeof grist.ready !== 'function') {
-            messageElement.textContent = "Error: grist.ready() is not a function after delay. Grist API might be partially loaded or an older version.";
-            const container = document.getElementById('widget-container');
-            if (container) {
-                container.innerHTML = '<div class="error-message">Error: grist.ready() not a function. Check console for details.</div>';
+            } catch (error) {
+                console.error("[WIDGET] Error generating PDF:", error);
+                alert("Failed to generate PDF report. Check your browser's console for details.");
             }
-            console.error("[WIDGET] 'grist.ready' is not a function after delay. Cannot proceed with Grist API initialization.");
-        } else {
-            grist.ready().then(() => {
-                console.log("[WIDGET] Grist API is ready.");
-                messageElement.textContent = "Grist API connected. Select an event.";
+        }
 
-                // Request full access
-                grist.set.requestedPermissions({ requiredAccess: 'full' });
-
-                grist.on('record', (record, mappings) => {
-                    currentRecord = record;
-                    currentRecordId = record ? record.id : null;
-
-                    console.log("[WIDGET] grist.onRecord triggered.");
-                    console.log("[WIDGET] Current record data:", currentRecord);
-                    console.log("[WIDGET] Current record ID:", currentRecordId);
-                    console.log("[WIDGET] Mappings provided:", mappings);
-
-                    if (currentRecord && Object.keys(currentRecord).length > 0) {
-                        messageElement.style.display = 'none';
-                        downloadPdfButton.style.display = 'block';
-                        recordInfoElement.textContent = `Selected Event: ${currentRecord.$Name || currentRecord.$EventCode || 'Unnamed Event'}`;
-                        downloadPdfButton.disabled = false;
-                        console.log("[WIDGET] Event record detected. Button enabled.");
-                    } else {
-                        messageElement.style.display = 'block';
-                        downloadPdfButton.style.display = 'none';
-                        recordInfoElement.textContent = '';
-                        downloadPdfButton.disabled = true;
-                        console.log("[WIDGET] No event record selected. Button disabled.");
-                    }
-                });
-
-                // Enable debug button once Grist API is ready
-                debugButton.disabled = false;
-                console.log("[WIDGET] Debug button enabled.");
-
-            }).catch(error => {
-                console.error("[WIDGET] Error initializing Grist API:", error);
-                messageElement.textContent = "Error connecting to Grist API. Check console for details.";
+        // --- CORRECT GRIST API INITIALIZATION WITH DIAGNOSTICS ---
+        console.log("[WIDGET] Checking grist object: ", typeof grist);
+        // Using a setTimeout for diagnostic purposes to rule out extremely fast race conditions
+        setTimeout(() => {
+            if (typeof grist === 'undefined') {
+                messageElement.textContent = "Error: Grist API is not loaded. Ensure the widget is running in Grist.";
                 const container = document.getElementById('widget-container');
                 if (container) {
-                    container.innerHTML = '<div class="error-message">Error with Grist API. Check console for details.</div>';
+                    container.innerHTML = '<div class="error-message">Error: Grist API not loaded. Check console for details.</div>';
                 }
-            });
-        }
-    }, 100); // 100ms delay
-}
-    // --- END CORRECT GRIST API INITIALIZATION ---
-
-
-    // Event listener for the new debug button
-    debugButton.addEventListener('click', async () => {
-        console.log("[WIDGET] Debug Button clicked. Attempting to fetch selected record directly.");
-        console.log("[WIDGET] grist.doc object (on debug click):", grist.doc); // Log grist.doc directly
-
-        // Add a check before attempting to fetch, in case grist.doc isn't ready
-        if (!grist.doc || typeof grist.doc.fetchSelectedRecord !== 'function') {
-            console.error("[WIDGET] grist.doc is not fully initialized or accessible for fetching. Cannot fetch record.");
-            recordInfoElement.textContent = 'Grist API not ready for direct fetch. Try again or select a record.';
-            return;
-        }
-
-        try {
-            const viewSectionId = await grist.doc.get.currentViewSectionId();
-            console.log("[WIDGET] Current View Section ID:", viewSectionId);
-
-            const viewSection = await grist.doc.get.currentViewSection();
-            console.log("[WIDGET] Current View Section Details:", viewSection);
-
-            const fetchedRecord = await grist.doc.fetchSelectedRecord();
-            console.log("[WIDGET] grist.doc.fetchSelectedRecord() result:", fetchedRecord);
-
-            if (fetchedRecord && Object.keys(fetchedRecord).length > 0) {
-                messageElement.style.display = 'none';
-                downloadPdfButton.style.display = 'block';
-                recordInfoElement.textContent = `Manually Fetched Event: ${fetchedRecord.$Name || fetchedRecord.$EventCode || 'Unnamed Event'}`;
-                downloadPdfButton.disabled = false;
-                currentRecord = fetchedRecord;
-                currentRecordId = fetchedRecord.id;
-                console.log("[WIDGET] Manually fetched record data. Button enabled.");
+                console.error("[WIDGET] 'grist' object is undefined. Cannot proceed with Grist API initialization.");
+            } else if (typeof grist.ready !== 'function') {
+                messageElement.textContent = "Error: grist.ready() is not a function. Grist API might be partially loaded or an older version.";
+                const container = document.getElementById('widget-container');
+                if (container) {
+                    container.innerHTML = '<div class="error-message">Error: grist.ready() not a function. Check console for details.</div>';
+                }
+                console.error("[WIDGET] 'grist.ready' is not a function. Cannot proceed with Grist API initialization.");
+                console.log("[WIDGET] grist object details (for diagnosis):", grist);
             } else {
-                messageElement.style.display = 'block';
-                downloadPdfButton.style.display = 'none';
-                recordInfoElement.textContent = 'No record fetched by debug button.';
-                downloadPdfButton.disabled = true;
-                console.log("[WIDGET] No record fetched by debug button. Button disabled.");
+                grist.ready().then(() => {
+                    console.log("[WIDGET] Grist API is ready.");
+                    messageElement.textContent = "Grist API connected. Select an event.";
+
+                    // Request full access
+                    grist.set.requestedPermissions({ requiredAccess: 'full' });
+
+                    grist.on('record', (record, mappings) => {
+                        currentRecord = record;
+                        currentRecordId = record ? record.id : null;
+
+                        console.log("[WIDGET] grist.onRecord triggered.");
+                        console.log("[WIDGET] Current record data:", currentRecord);
+                        console.log("[WIDGET] Current record ID:", currentRecordId);
+                        console.log("[WIDGET] Mappings provided:", mappings);
+
+                        if (currentRecord && Object.keys(currentRecord).length > 0) {
+                            messageElement.style.display = 'none';
+                            downloadPdfButton.style.display = 'block';
+                            recordInfoElement.textContent = `Selected Event: ${currentRecord.$Name || currentRecord.$EventCode || 'Unnamed Event'}`;
+                            downloadPdfButton.disabled = false;
+                            console.log("[WIDGET] Event record detected. Button enabled.");
+                        } else {
+                            messageElement.style.display = 'block';
+                            downloadPdfButton.style.display = 'none';
+                            recordInfoElement.textContent = '';
+                            downloadPdfButton.disabled = true;
+                            console.log("[WIDGET] No event record selected. Button disabled.");
+                        }
+                    });
+
+                    // Enable debug button once Grist API is ready
+                    debugButton.disabled = false;
+                    console.log("[WIDGET] Debug button enabled.");
+
+                }).catch(error => {
+                    console.error("[WIDGET] Error initializing Grist API:", error);
+                    messageElement.textContent = "Error connecting to Grist API. Check console for details.";
+                    const container = document.getElementById('widget-container');
+                    if (container) {
+                        container.innerHTML = '<div class="error-message">Error with Grist API. Check console for details.</div>';
+                    }
+                });
+            }
+        }, 100); // Small delay to allow Grist API to fully populate
+        // --- END CORRECT GRIST API INITIALIZATION ---
+
+
+        // Event listener for the new debug button
+        debugButton.addEventListener('click', async () => {
+            console.log("[WIDGET] Debug Button clicked. Attempting to fetch selected record directly.");
+            console.log("[WIDGET] grist.doc object (on debug click):", grist.doc); // Log grist.doc directly
+
+            // Add a check before attempting to fetch, in case grist.doc isn't ready
+            if (!grist.doc || typeof grist.doc.fetchSelectedRecord !== 'function') {
+                console.error("[WIDGET] grist.doc is not fully initialized or accessible for fetching. Cannot fetch record.");
+                recordInfoElement.textContent = 'Grist API not ready for direct fetch. Try again or select a record.';
+                return;
             }
 
-        } catch (error) {
-            console.error("[WIDGET] Error fetching record via debug button:", error);
-            recordInfoElement.textContent = 'Error fetching record via debug button. Check console.';
-        }
-    });
+            try {
+                const viewSectionId = await grist.doc.get.currentViewSectionId();
+                console.log("[WIDGET] Current View Section ID:", viewSectionId);
 
-    // Attach event listener to the download button
-    downloadPdfButton.addEventListener('click', generatePdfReport);
+                const viewSection = await grist.doc.get.currentViewSection();
+                console.log("[WIDGET] Current View Section Details:", viewSection);
 
-</script>
+                const fetchedRecord = await grist.doc.fetchSelectedRecord();
+                console.log("[WIDGET] grist.doc.fetchSelectedRecord() result:", fetchedRecord);
+
+                if (fetchedRecord && Object.keys(fetchedRecord).length > 0) {
+                    messageElement.style.display = 'none';
+                    downloadPdfButton.style.display = 'block';
+                    recordInfoElement.textContent = `Manually Fetched Event: ${fetchedRecord.$Name || fetchedRecord.$EventCode || 'Unnamed Event'}`;
+                    downloadPdfButton.disabled = false;
+                    currentRecord = fetchedRecord;
+                    currentRecordId = fetchedRecord.id;
+                    console.log("[WIDGET] Manually fetched record data. Button enabled.");
+                } else {
+                    messageElement.style.display = 'block';
+                    downloadPdfButton.style.display = 'none';
+                    recordInfoElement.textContent = 'No record fetched by debug button.';
+                    downloadPdfButton.disabled = true;
+                    console.log("[WIDGET] No record fetched by debug button. Button disabled.");
+                }
+
+            } catch (error) {
+                console.error("[WIDGET] Error fetching record via debug button:", error);
+                recordInfoElement.textContent = 'Error fetching record via debug button. Check console.';
+            }
+        });
+
+        // Attach event listener to the download button
+        downloadPdfButton.addEventListener('click', generatePdfReport);
+
+    </script>
 </body>
 </html>
