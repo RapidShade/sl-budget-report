@@ -2,12 +2,29 @@ let gristDoc;
 let selectedEvent = null;
 let expenses = [];
 let categories = {};
+let gristDoc = null;
+let selectedEvent = null;
 
-window.grist.ready().then(() => {
-  gristDoc = window.grist;
+console.log("[WIDGET] Starting PDF widget…");
+
+window.grist.ready({ requiredAccess: 'read table' }).then(api => {
+  console.log("[WIDGET] Grist API ready");
+  gristDoc = api;
+
+  if (!gristDoc || !gristDoc.docApi) {
+    console.error("[WIDGET] No docApi — check permissions or access level.");
+    document.getElementById('status').textContent = "❌ Widget failed to initialize. No access.";
+    return;
+  }
+
   gristDoc.onRecord((record) => {
-    if (!record) return;
+    if (!record) {
+      console.warn("[WIDGET] No record selected.");
+      return;
+    }
+
     selectedEvent = record;
+    console.log("[WIDGET] Selected event:", selectedEvent);
     document.getElementById('status').textContent = 'Selected Event: ' + (record.Title || '[Untitled]');
     loadData();
   });
