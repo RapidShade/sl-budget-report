@@ -1,4 +1,4 @@
-console.log("[WIDGET] v3.0 Starting");
+console.log("[WIDGET] v4.1 Starting");
 
 const { PDFDocument, rgb, StandardFonts } = PDFLib;
 const messageElement = document.getElementById('message');
