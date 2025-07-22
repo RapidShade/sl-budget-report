@@ -84,7 +84,7 @@
     </div>
 
     <script>
-        console.log("[WIDGET] v4.15 Starting (Diagnostic Bypass of grist.ready().then())"); // Version updated to 4.15
+        console.log("[WIDGET] v4.16 Starting"); // Version updated to 4.15 and diagnostic message removed
 
         const { PDFDocument, rgb, StandardFonts } = PDFLib;
         const messageElement = document.getElementById('message');
@@ -205,77 +205,51 @@
             }
         }
 
-        // --- DIAGNOSTIC CODE (NOT FOR PRODUCTION) ---
-        // This attempts to interact with Grist API directly without relying on grist.ready().then()
-        // to see if grist.doc becomes available in any case.
-        let gristApiInitialized = false;
+        // --- CORRECT GRIST API INITIALIZATION ---
+        grist.ready().then(() => {
+            console.log("[WIDGET] Grist API is ready.");
+            messageElement.textContent = "Grist API connected. Select an event.";
 
-        function attemptGristApiDirectAccess() {
-            if (typeof grist === 'undefined') {
-                console.warn("[WIDGET] 'grist' object is still undefined. Retrying direct access...");
-                messageElement.textContent = "Connecting to Grist API...";
-                setTimeout(attemptGristApiDirectAccess, 500); // Retry
-                return;
-            }
+            // Request full access
+            grist.set.requestedPermissions({ requiredAccess: 'full' });
 
-            if (gristApiInitialized) {
-                console.log("[WIDGET] Grist API already initialized (direct access).");
-                return;
-            }
+            grist.on('record', (record, mappings) => {
+                currentRecord = record;
+                currentRecordId = record ? record.id : null;
 
-            console.log("[WIDGET] 'grist' object found. Attempting to set up onRecord listener and enable buttons directly.");
+                console.log("[WIDGET] grist.onRecord triggered.");
+                console.log("[WIDGET] Current record data:", currentRecord);
+                console.log("[WIDGET] Current record ID:", currentRecordId);
+                console.log("[WIDGET] Mappings provided:", mappings);
 
-            try {
-                // Request full access directly.
-                // Note: Without grist.ready(), this might not function fully or properly signal readiness,
-                // but we are trying to see if any Grist API methods are usable.
-                grist.set.requestedPermissions({ requiredAccess: 'full' });
-
-                grist.on('record', (record, mappings) => {
-                    currentRecord = record;
-                    currentRecordId = record ? record.id : null;
-
-                    console.log("[WIDGET] grist.onRecord triggered (direct access).");
-                    console.log("[WIDGET] Current record data:", currentRecord);
-                    console.log("[WIDGET] Current record ID:", currentRecordId);
-                    console.log("[WIDGET] Mappings provided:", mappings);
-
-                    if (currentRecord && Object.keys(currentRecord).length > 0) {
-                        messageElement.style.display = 'none';
-                        downloadPdfButton.style.display = 'block';
-                        recordInfoElement.textContent = `Selected Event: ${currentRecord.$Name || currentRecord.$EventCode || 'Unnamed Event'}`;
-                        downloadPdfButton.disabled = false;
-                        console.log("[WIDGET] Event record detected. Button enabled (direct access).");
-                    } else {
-                        messageElement.style.display = 'block';
-                        downloadPdfButton.style.display = 'none';
-                        recordInfoElement.textContent = '';
-                        downloadPdfButton.disabled = true;
-                        console.log("[WIDGET] No event record selected. Button disabled (direct access).");
-                    }
-                });
-
-                // Enable buttons immediately after setting up listener
-                debugButton.disabled = false;
-                downloadPdfButton.disabled = false; // Enable if a record is already selected (unlikely on load)
-                messageElement.textContent = "Grist API attempted direct connection. Select an event.";
-                gristApiInitialized = true;
-                console.log("[WIDGET] Grist API listeners and buttons enabled (direct access).");
-
-            } catch (error) {
-                console.error("[WIDGET] Error during direct Grist API setup:", error);
-                messageElement.textContent = "Error setting up Grist API directly. Check console.";
-                const container = document.getElementById('widget-container');
-                    if (container) {
-                    container.innerHTML = '<div class="error-message">Error with Grist API. Check console for details.</div>';
+                if (currentRecord && Object.keys(currentRecord).length > 0) {
+                    messageElement.style.display = 'none';
+                    downloadPdfButton.style.display = 'block';
+                    recordInfoElement.textContent = `Selected Event: ${currentRecord.$Name || currentRecord.$EventCode || 'Unnamed Event'}`;
+                    downloadPdfButton.disabled = false;
+                    console.log("[WIDGET] Event record detected. Button enabled.");
+                } else {
+                    messageElement.style.display = 'block';
+                    downloadPdfButton.style.display = 'none';
+                    recordInfoElement.textContent = '';
+                    downloadPdfButton.disabled = true;
+                    console.log("[WIDGET] No event record selected. Button disabled.");
                 }
-            }
-        }
+            });
 
-        // Start attempting direct Grist API access after a short initial delay
-        // to ensure the grist-plugin-api.js script has executed.
-        setTimeout(attemptGristApiDirectAccess, 100);
-        // --- END DIAGNOSTIC CODE ---
+            // Enable debug button once Grist API is ready
+            debugButton.disabled = false;
+            console.log("[WIDGET] Debug button enabled.");
+
+        }).catch(error => {
+            console.error("[WIDGET] Error initializing Grist API:", error);
+            messageElement.textContent = "Error connecting to Grist API. Check console for details.";
+            const container = document.getElementById('widget-container');
+            if (container) {
+                container.innerHTML = '<div class="error-message">Error with Grist API. Check console for details.</div>';
+            }
+        });
+        // --- END CORRECT GRIST API INITIALIZATION ---
 
 
         // Event listener for the new debug button
