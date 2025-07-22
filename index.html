@@ -79,15 +79,17 @@
         <h2>Event PDF Budget Report</h2>
         <p id="message">Connecting to Grist API...</p>
         <button id="downloadPdfButton" disabled>Download PDF Report</button>
+        <button id="debugButton" disabled>Debug Grist API</button>
         <div id="record-info"></div>
     </div>
 
     <script>
-        console.log("[WIDGET] v4.18 Starting (Re-integrated on stable base)");
+        console.log("[WIDGET] v4.19 Starting (Re-integrated on stable base, debug re-enabled)");
 
         const { PDFDocument, rgb, StandardFonts } = PDFLib;
         const messageElement = document.getElementById('message');
         const downloadPdfButton = document.getElementById('downloadPdfButton');
+        const debugButton = document.getElementById('debugButton'); // Debug button element
         const recordInfoElement = document.getElementById('record-info');
         let currentRecord = null;
         let currentRecordId = null;
@@ -333,7 +335,7 @@
         // Function to update UI based on selected record
         function updateUI(record) {
             currentRecord = record;
-            currentRecordId = record ? record.id : null;
+            currentRecordId = record ? record.id : null; // Ensure currentRecordId is set
 
             console.log("[WIDGET] updateUI triggered. Current record:", currentRecord);
 
@@ -351,8 +353,8 @@
             }
         }
 
-        // --- Grist API Initialization (Reverted to original working pattern) ---
-        grist.ready().then(async function() { // Added 'async' here
+        // --- Grist API Initialization ---
+        grist.ready().then(async function() { // Added 'async' here to allow await
             console.log("[WIDGET] Grist API ready().then() triggered.");
 
             // Request full access to the document.
@@ -375,7 +377,7 @@
             } catch (error) {
                 console.error("[WIDGET] Error fetching ExpenseCategory table:", error);
                 messageElement.textContent = "Error fetching expense categories. Check console.";
-                return;
+                // Do not return here, allow grist.onRecord to be set up even if categories fail
             }
 
             // Use grist.onRecord to listen for selections in the linked table.
@@ -385,9 +387,10 @@
             // Initial UI state
             messageElement.textContent = "Select an event record in Grist to generate a PDF report.";
             downloadPdfButton.disabled = true;
+            debugButton.disabled = false; // Enable debug button
             console.log("[WIDGET] Grist API initialization complete.");
 
-        }).catch(error => {
+        }).catch(error => { // Catch for grist.ready() promise rejection
             console.error("[WIDGET] Error during Grist API initialization (grist.ready().catch):", error);
             messageElement.textContent = "Failed to connect to Grist API. Check console for details.";
             const container = document.getElementById('widget-container');
@@ -396,8 +399,30 @@
             }
         });
 
-        // Attach event listener to the download button
+        // --- EVENT LISTENERS ---
         downloadPdfButton.addEventListener('click', generatePdfReport);
+
+        // The debug button will manually fetch the currently selected record.
+        debugButton.addEventListener('click', async () => {
+            console.log("[WIDGET] Debug: Attempting to fetch selected record manually.");
+            try {
+                // Use the modern grist.fetchSelectedRecord() function
+                const record = await grist.fetchSelectedRecord();
+                if (record) {
+                     console.log("[WIDGET] Debug: Fetched record successfully:", record);
+                     recordInfoElement.textContent = `Debug Fetch OK: ${record.$Name || record.$EventCode || 'Unnamed Event'}`;
+                     updateUI(record); // Update the whole UI with the fetched record
+                } else {
+                     console.log("[WIDGET] Debug: No record is currently selected.");
+                     recordInfoElement.textContent = 'Debug: No record selected.';
+                     updateUI(null); // Clear UI if no record selected
+                }
+            } catch (error) {
+                console.error("[WIDGET] Debug: Error fetching record:", error);
+                recordInfoElement.textContent = 'Debug: Error fetching record.';
+                updateUI(null); // Clear UI on error
+            }
+        });
 
     </script>
 </body>
