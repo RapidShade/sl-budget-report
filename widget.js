@@ -1,45 +1,39 @@
-console.log("[WIDGET] v0.3 Starting PDF widget...");
+console.log("[WIDGET] v0.4 Starting PDF widget...");
 
-let gristDoc = null;
 let selectedEvent = null;
 let expenses = [];
 let categories = {};
+let gristDoc = null;
 
 window.addEventListener("message", (event) => {
   if (!window.grist && event.data && event.data.gristDocAPI) {
-    console.log("[WIDGET] Injecting Grist API context from postMessage");
+    console.log("[WIDGET] Injected Grist API via postMessage");
     window.grist = event.data.gristDocAPI;
-    initializeGristWidget();
+    init();
   }
 });
 
-function initializeGristWidget() {
+function init() {
   if (!window.grist) {
-    console.error("[WIDGET] Grist API not available.");
-    document.getElementById('status').textContent = "❌ Grist API not injected.";
+    console.error("[WIDGET] Grist API is not defined.");
     return;
   }
 
-  window.grist.ready({ requiredAccess: 'read table' }).then(api => {
+  window.grist.ready({ requiredAccess: "read table" }).then(api => {
     console.log("[WIDGET] Grist API ready");
     gristDoc = api;
 
-    if (!gristDoc || !gristDoc.docApi) {
-      console.error("[WIDGET] ❌ Grist docApi missing.");
-      document.getElementById('status').textContent = "❌ Grist doc API not available.";
-      return;
-    }
-
     gristDoc.onRecord((record) => {
       if (!record) {
-        console.warn("[WIDGET] No event record selected.");
+        console.warn("[WIDGET] No record selected");
+        selectedEvent = null;
         document.getElementById('status').textContent = "⚠️ Select an event to generate report.";
         return;
       }
 
       selectedEvent = record;
-      document.getElementById('status').textContent = '✅ Selected Event: ' + (record.Title || '[Untitled]');
-      console.log("[WIDGET] Selected event:", selectedEvent);
+      console.log("[WIDGET] Selected Event:", selectedEvent);
+      document.getElementById('status').textContent = "✅ Selected Event: " + (record.Title || '[Untitled]');
       loadData();
     });
   });
@@ -47,23 +41,27 @@ function initializeGristWidget() {
 
 async function loadData() {
   try {
-    const expensesTable = await gristDoc.docApi.fetchTable('Expenses');
-    const categoryTable = await gristDoc.docApi.fetchTable('ExpenseCategories');
+    const [expensesTable, categoryTable] = await Promise.all([
+      gristDoc.docApi.fetchTable('Expenses'),
+      gristDoc.docApi.fetchTable('ExpenseCategories')
+    ]);
 
     categories = {};
-    for (let cat of categoryTable.records) {
+    for (const cat of categoryTable.records) {
       categories[cat.id] = cat.fields.Name;
     }
 
-    expenses = expensesTable.records.filter(exp => exp.fields.Event === selectedEvent.id).map(exp => ({
-      title: exp.fields.Title || "",
-      amount: exp.fields.Amount || 0,
-      category: categories[exp.fields.ExpenseCategory] || "Χωρίς Κατηγορία"
-    }));
+    expenses = expensesTable.records
+      .filter(exp => exp.fields.Event === selectedEvent.id)
+      .map(exp => ({
+        title: exp.fields.Title || "",
+        amount: exp.fields.Amount || 0,
+        category: categories[exp.fields.ExpenseCategory] || "Χωρίς Κατηγορία"
+      }));
 
     console.log("[WIDGET] Loaded expenses:", expenses.length);
   } catch (e) {
-    console.error("[WIDGET] Error loading data:", e);
+    console.error("[WIDGET] Failed to load tables:", e);
     document.getElementById('status').textContent = "❌ Failed to load data.";
   }
 }
@@ -74,7 +72,7 @@ function generatePDF() {
     return;
   }
 
-  console.log("[WIDGET] Generating PDF...");
+  console.log("[WIDGET] Generating PDF…");
 
   const grouped = {};
   for (const exp of expenses) {
@@ -102,7 +100,7 @@ function generatePDF() {
   content.push({ text: 'Γενικό Σύνολο: ' + total.toFixed(2) + ' €', bold: true, fontSize: 14 });
 
   const docDefinition = {
-    content: content,
+    content,
     styles: {
       header: { fontSize: 18, bold: true },
       subheader: { fontSize: 14, bold: true, margin: [0, 10, 0, 4] }
