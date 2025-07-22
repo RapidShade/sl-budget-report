@@ -84,7 +84,7 @@
     </div>
 
     <script>
-        console.log("[WIDGET] v4.13 Starting (Robust grist.ready check)"); // Version updated to 4.13
+        console.log("[WIDGET] v4.14 Starting (Micro-delay before grist.ready() call)"); // Version updated to 4.14
 
         const { PDFDocument, rgb, StandardFonts } = PDFLib;
         const messageElement = document.getElementById('message');
@@ -206,7 +206,7 @@
         }
 
         function initializeGristAPI() {
-            // CRITICAL CHECK: Ensure grist and grist.ready are defined and are functions.
+            // CRITICAL CHECK: Ensure grist is defined and grist.ready is a function.
             if (typeof grist === 'undefined' || typeof grist.ready !== 'function') {
                 console.error("[WIDGET] CRITICAL ERROR: 'grist' object or 'grist.ready' function is not defined. Retrying initialization...");
                 messageElement.textContent = "Error: Grist API not ready. Retrying...";
@@ -216,48 +216,52 @@
 
             console.log("[WIDGET] grist.ready is a function. Attempting Grist API initialization.");
 
-            grist.ready({
-                requiredAccess: 'full'
-            }).then(() => {
-                console.log("[WIDGET] Grist API is fully ready.");
-                messageElement.textContent = "Select an event to generate a PDF report."; // Update message now that API is ready
+            // Add a micro-delay here to give Grist's internal API a chance to fully set up
+            // before grist.ready() is actually called and its return value is expected to be a Promise.
+            setTimeout(() => {
+                grist.ready({
+                    requiredAccess: 'full'
+                }).then(() => {
+                    console.log("[WIDGET] Grist API is fully ready.");
+                    messageElement.textContent = "Select an event to generate a PDF report."; // Update message now that API is ready
 
-                // Enable debug button once API is ready
-                debugButton.disabled = false;
+                    // Enable debug button once API is ready
+                    debugButton.disabled = false;
 
-                // Register the onRecord handler
-                grist.on('record', (record, mappings) => {
-                    currentRecord = record;
-                    currentRecordId = record ? record.id : null;
+                    // Register the onRecord handler
+                    grist.on('record', (record, mappings) => {
+                        currentRecord = record;
+                        currentRecordId = record ? record.id : null;
 
-                    console.log("[WIDGET] grist.onRecord triggered.");
-                    console.log("[WIDGET] Current record data:", currentRecord);
-                    console.log("[WIDGET] Current record ID:", currentRecordId);
-                    console.log("[WIDGET] Mappings provided:", mappings);
+                        console.log("[WIDGET] grist.onRecord triggered.");
+                        console.log("[WIDGET] Current record data:", currentRecord);
+                        console.log("[WIDGET] Current record ID:", currentRecordId);
+                        console.log("[WIDGET] Mappings provided:", mappings);
 
-                    if (currentRecord && Object.keys(currentRecord).length > 0) {
-                        messageElement.style.display = 'none';
-                        downloadPdfButton.style.display = 'block';
-                        recordInfoElement.textContent = `Selected Event: ${currentRecord.$Name || currentRecord.$EventCode || 'Unnamed Event'}`;
-                        downloadPdfButton.disabled = false;
-                        console.log("[WIDGET] Event record detected. Button enabled.");
-                    } else {
-                        messageElement.style.display = 'block';
-                        downloadPdfButton.style.display = 'none';
-                        recordInfoElement.textContent = '';
-                        downloadPdfButton.disabled = true;
-                        console.log("[WIDGET] No event record selected. Button disabled.");
+                        if (currentRecord && Object.keys(currentRecord).length > 0) {
+                            messageElement.style.display = 'none';
+                            downloadPdfButton.style.display = 'block';
+                            recordInfoElement.textContent = `Selected Event: ${currentRecord.$Name || currentRecord.$EventCode || 'Unnamed Event'}`;
+                            downloadPdfButton.disabled = false;
+                            console.log("[WIDGET] Event record detected. Button enabled.");
+                        } else {
+                            messageElement.style.display = 'block';
+                            downloadPdfButton.style.display = 'none';
+                            recordInfoElement.textContent = '';
+                            downloadPdfButton.disabled = true;
+                            console.log("[WIDGET] No event record selected. Button disabled.");
+                        }
+                    });
+
+                    console.log("[WIDGET] Grist API ready callback registered and event listener set up.");
+                }).catch(error => {
+                    console.error("[WIDGET] Error during Grist API ready initialization:", error);
+                    const container = document.getElementById('widget-container');
+                    if (container) {
+                        container.innerHTML = '<div class="error-message">Error initializing Grist API. Check console for details.</div>';
                     }
                 });
-
-                console.log("[WIDGET] Grist API ready callback registered and event listener set up.");
-            }).catch(error => {
-                console.error("[WIDGET] Error during Grist API ready initialization:", error);
-                const container = document.getElementById('widget-container');
-                if (container) {
-                    container.innerHTML = '<div class="error-message">Error initializing Grist API. Check console for details.</div>';
-                }
-            });
+            }, 0); // Micro-delay
         }
 
         // Initial call to start the Grist API initialization process
