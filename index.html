@@ -82,11 +82,11 @@
     </div>
 
     <script>
-        console.log("[WIDGET] v4.6 Starting"); // Version updated to 4.6
+        console.log("[WIDGET] v4.7 Starting"); // Version updated to 4.7
 
         // --- Diagnostic Check ---
         if (typeof grist === 'undefined') {
-            console.error("[WIDGET] CRITICAL ERROR: 'grist' object is not defined. Grist API script (grist-plugin-api.js) might not have loaded correctly or is blocked. Check network tab for 404/failures, and console for CSP errors.");
+            console.error("[WIDGET] CRITICAL ERROR: 'grist' object is not defined. Grist API script (grist-plugin-api.js) might not have loaded correctly or or is blocked. Check network tab for 404/failures, and console for CSP errors.");
             const container = document.getElementById('widget-container');
             if (container) {
                 container.innerHTML = '<div class="error-message">Error: Grist API not loaded. Please ensure the widget URL is correct and network access to the Grist API script is allowed (check browser console/network tab for errors like 404 or CSP).</div>';
@@ -108,18 +108,20 @@
             const d = new Date(date);
             let dateValue;
             if (typeof date === 'number') {
+                // Grist dates can sometimes be numerical timestamps (ms since epoch)
+                // or Excel-style serial dates (days since 1899-12-30 or 1900-01-01)
+                // We'll treat numbers as milliseconds since epoch here for simplicity,
+                // which is common for JS Date objects. If Grist sends Excel serial,
+                // it might need a more complex conversion.
                 dateValue = new Date(date);
-                if (date < 60000 && date > 0) {
-                    // This is a rough heuristic for Excel serial dates.
-                }
             } else if (typeof date === 'string') {
                 dateValue = new Date(date);
             } else {
                 return 'N/A';
             }
 
-            if (isNaN(dateValue.getTime())) return 'Invalid Date';
-            return dateValue.toISOString().split('T')[0];
+            if (isNaN(dateValue.getTime())) return 'Invalid Date'; // Check if the date is valid
+            return dateValue.toISOString().split('T')[0]; // Format as YYYY-MM-DD
         }
 
         async function generatePdfReport() {
@@ -136,6 +138,7 @@
                 const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
                 const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
+                // Destructure relevant fields from the currentRecord
                 const {
                     $EventCode,
                     $Name,
@@ -150,41 +153,44 @@
                     $Organiser
                 } = currentRecord;
 
+                // Format dates
                 const startDateFormatted = formatDate($DateStart);
                 const endDateFormatted = formatDate($DateEnd);
 
-                let y = 750;
-                const x = 50;
-                const lineHeight = 20;
+                let y = 750; // Starting Y position for text
+                const x = 50; // X position for text
+                const lineHeight = 20; // Space between lines of text
 
                 page.drawText('Event Report', {
                     x,
                     y,
                     font: boldFont,
                     size: 24,
-                    color: rgb(0.17, 0.24, 0.31), // Dark blue-gray
+                    color: rgb(0.17, 0.24, 0.31), // Dark blue-gray for heading
                 });
-                y -= 40;
+                y -= 40; // Move down for the next section
 
+                // Helper function to add details to the PDF
                 const addDetail = (label, value) => {
                     page.drawText(`${label}: `, {
                         x,
                         y,
                         font: boldFont,
                         size: 12,
-                        color: rgb(0, 0, 0),
+                        color: rgb(0, 0, 0), // Black color for label
                     });
-                    const labelWidth = boldFont.widthOfTextAtSize(`${label}: `, 12);
-                    page.drawText(String(value || 'N/A'), {
-                        x: x + labelWidth + 5,
+                    const labelWidth = boldFont.widthOfTextAtSize(`${label}: `, 12); // Measure label width
+                    page.drawText(String(value || 'N/A'), { // Ensure value is a string, default to 'N/A'
+                        x: x + labelWidth + 5, // Position value after label with a small gap
                         y,
                         font: font,
                         size: 12,
-                        color: rgb(0, 0, 0),
+                        color: rgb(0, 0, 0), // Black color for value
                     });
-                    y -= lineHeight;
+                    y -= lineHeight; // Move to the next line
                 };
 
+                // Add all the event details
                 addDetail('Event Code', $EventCode);
                 addDetail('Name', $Name);
                 addDetail('Sport', $Sport);
@@ -197,17 +203,18 @@
                 addDetail('POOL_SIZE', $POOL_SIZE);
                 addDetail('Organiser', $Organiser);
 
+                // Save the PDF and trigger download
                 const pdfBytes = await pdfDoc.save();
-                const filename = `Event_Report_${$EventCode || 'Unknown'}.pdf`;
+                const filename = `Event_Report_${$EventCode || 'Unknown'}.pdf`; // Dynamic filename
 
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
                 link.download = filename;
                 document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(link.href);
+                link.click(); // Trigger download
+                document.body.removeChild(link); // Clean up the temporary link
+                URL.revokeObjectURL(link.href); // Release the object URL
 
                 console.log(`[WIDGET] PDF generated and downloaded: ${filename}`);
 
@@ -219,33 +226,39 @@
 
         // Grist API initialization
         grist.ready({
-            requiredAccess: 'full',
-            onEdit: () => { console.log("[WIDGET] onEdit triggered. Widget is being configured."); },
+            requiredAccess: 'full', // Request full access to the document
+            // Removed onEdit callback as it was causing a cloning error.
+            // onEdit property in grist.ready is for access level, not a function callback.
             onRecord: (record, mappings) => {
                 currentRecord = record;
-                currentRecordId = mappings && mappings.id ? (record && record.id) : null;
+                // Grist sometimes provides `id` directly in the record, sometimes in mappings.
+                // We'll prioritize `record.id` if available.
+                currentRecordId = record ? record.id : null;
 
                 console.log("[WIDGET] grist.onRecord triggered.");
                 console.log("[WIDGET] Current record data:", currentRecord);
-                console.log("[WIDGET] Current record ID (from record object, if available):", currentRecord ? currentRecord.id : 'N/A');
-                console.log("[WIDGET] Mappings provided:", mappings);
+                console.log("[WIDGET] Current record ID:", currentRecordId);
+                console.log("[WIDGET] Mappings provided:", mappings); // For debugging purposes
 
                 if (currentRecord && Object.keys(currentRecord).length > 0) {
-                    messageElement.style.display = 'none';
-                    downloadPdfButton.style.display = 'block';
+                    // A record is selected and it's not empty
+                    messageElement.style.display = 'none'; // Hide initial message
+                    downloadPdfButton.style.display = 'block'; // Show download button
                     recordInfoElement.textContent = `Selected Event: ${currentRecord.$Name || currentRecord.$EventCode || 'Unnamed Event'}`;
-                    downloadPdfButton.disabled = false;
+                    downloadPdfButton.disabled = false; // Enable button
                     console.log("[WIDGET] Event record detected. Button enabled.");
                 } else {
-                    messageElement.style.display = 'block';
-                    downloadPdfButton.style.display = 'none';
-                    recordInfoElement.textContent = '';
-                    downloadPdfButton.disabled = true;
+                    // No record or empty record selected
+                    messageElement.style.display = 'block'; // Show initial message
+                    downloadPdfButton.style.display = 'none'; // Hide download button
+                    recordInfoElement.textContent = ''; // Clear record info
+                    downloadPdfButton.disabled = true; // Disable button
                     console.log("[WIDGET] No event record selected. Button disabled.");
                 }
             }
         });
 
+        // Attach event listener to the download button
         downloadPdfButton.addEventListener('click', generatePdfReport);
 
         console.log("[WIDGET] Grist API ready callback registered and event listener set up.");
