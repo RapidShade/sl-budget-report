@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <style>
         body {
-            font-family: -apple-system, BlinkMacMacFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
             color: #333;
             margin: 0;
             padding: 20px;
@@ -16,7 +16,7 @@
             justify-content: center;
             height: 100vh;
             box-sizing: border-box;
-            text-align: center; /* Center error messages */
+            text-align: center;
         }
         .container {
             text-align: center;
@@ -46,7 +46,7 @@
             font-size: 1.1em;
             transition: background-color 0.3s ease;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            margin: 5px; /* Add some margin for the new button */
+            margin: 5px;
         }
         button:hover {
             background-color: #45a049;
@@ -60,7 +60,7 @@
             margin-top: 15px;
             font-size: 0.9em;
             color: #555;
-            min-height: 20px; /* To prevent layout shift */
+            min-height: 20px;
         }
         .error-message {
             color: red;
@@ -78,12 +78,12 @@
     <div class="container" id="widget-container">
         <h2>Event PDF Budget Report</h2>
         <p id="message">Connecting to Grist API...</p>
-        <button id="downloadPdfButton" style="display: block;" disabled>Download PDF Report</button>
+        <button id="downloadPdfButton" disabled>Download PDF Report</button>
         <div id="record-info"></div>
     </div>
 
     <script>
-        console.log("[WIDGET] v4.17 Starting (Reverted Grist API Init)");
+        console.log("[WIDGET] v4.18 Starting (Re-integrated on stable base)");
 
         const { PDFDocument, rgb, StandardFonts } = PDFLib;
         const messageElement = document.getElementById('message');
@@ -330,8 +330,29 @@
             }
         }
 
+        // Function to update UI based on selected record
+        function updateUI(record) {
+            currentRecord = record;
+            currentRecordId = record ? record.id : null;
+
+            console.log("[WIDGET] updateUI triggered. Current record:", currentRecord);
+
+            if (currentRecord && Object.keys(currentRecord).length > 0 && currentRecord.id) {
+                messageElement.style.display = 'none';
+                downloadPdfButton.disabled = false;
+                recordInfoElement.textContent = `Selected Event: ${currentRecord.$Name || currentRecord.$EventCode || 'Unnamed Event'}`;
+                console.log("[WIDGET] Event record detected. Button enabled.");
+            } else {
+                messageElement.style.display = 'block';
+                downloadPdfButton.disabled = true;
+                recordInfoElement.textContent = '';
+                messageElement.textContent = 'Select an event record in Grist to generate a PDF report.';
+                console.log("[WIDGET] No event record selected. Button disabled.");
+            }
+        }
+
         // --- Grist API Initialization (Reverted to original working pattern) ---
-        grist.ready().then(async function() {
+        grist.ready().then(async function() { // Added 'async' here
             console.log("[WIDGET] Grist API ready().then() triggered.");
 
             // Request full access to the document.
@@ -347,41 +368,23 @@
                     expenseCategoriesMap.set(cat.id, {
                         groupName: cat.$GroupName,
                         displayOrder: cat.$DisplayOrder,
-                        name: cat.$Name // Keep this here, even if not directly displayed as a sub-heading
+                        name: cat.$Name
                     });
                 });
                 console.log("[WIDGET] Expense Categories fetched and cached.");
             } catch (error) {
                 console.error("[WIDGET] Error fetching ExpenseCategory table:", error);
                 messageElement.textContent = "Error fetching expense categories. Check console.";
-                return; // Stop initialization if categories can't be fetched
+                return;
             }
 
-
             // Use grist.onRecord to listen for selections in the linked table.
-            grist.on('record', (record) => {
-                currentRecord = record;
-                currentRecordId = record ? record.id : null;
+            grist.onRecord(updateUI);
+            console.log("[WIDGET] grist.onRecord listener set.");
 
-                console.log("[WIDGET] grist.onRecord triggered.");
-                console.log("[WIDGET] Current record data:", currentRecord);
-                console.log("[WIDGET] Current record ID:", currentRecordId);
-
-                if (currentRecord && Object.keys(currentRecord).length > 0 && currentRecord.id) {
-                    messageElement.style.display = 'none';
-                    downloadPdfButton.disabled = false;
-                    recordInfoElement.textContent = `Selected Event: ${currentRecord.$Name || currentRecord.$EventCode || 'Unnamed Event'}`;
-                    console.log("[WIDGET] Event record detected. Button enabled.");
-                } else {
-                    messageElement.style.display = 'block';
-                    downloadPdfButton.disabled = true;
-                    recordInfoElement.textContent = '';
-                    messageElement.textContent = 'Select an event record in Grist to generate a PDF report.';
-                    console.log("[WIDGET] No event record selected. Button disabled.");
-                }
-            });
-
+            // Initial UI state
             messageElement.textContent = "Select an event record in Grist to generate a PDF report.";
+            downloadPdfButton.disabled = true;
             console.log("[WIDGET] Grist API initialization complete.");
 
         }).catch(error => {
