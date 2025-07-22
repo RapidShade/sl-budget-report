@@ -85,7 +85,7 @@
     </div>
 
     <script>
-        console.log("[WIDGET] v4.22 Starting (Fixing fetchTable undefined)");
+        console.log("[WIDGET] v4.23 Starting (Ensuring grist.doc readiness)");
 
         // Ensure pdf-lib and fontkit are loaded
         if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
@@ -142,11 +142,10 @@
 
             console.log("[WIDGET] updateUI triggered. Record:", currentRecord);
 
-            // New: Resolve the promise when grist.doc is confirmed available
-            // This is crucial for fixing the TypeError: Cannot read properties of undefined (reading 'fetchTable')
+            // Resolve the promise when grist.doc is confirmed available
             if (typeof grist !== 'undefined' && typeof grist.doc !== 'undefined') {
                 resolveGristDocReady();
-                console.log("[WIDGET] grist.doc confirmed ready.");
+                console.log("[WIDGET] grist.doc confirmed ready (via updateUI).");
             }
 
             if (record && Object.keys(record).length > 0 && record.id) {
@@ -172,7 +171,8 @@
          * Called once during initialization.
          */
         async function initGristData() {
-            // New: Wait for grist.doc to be ready before fetching data
+            // Wait for grist.doc to be ready before fetching data
+            console.log("[WIDGET] initGristData: Awaiting grist.doc readiness...");
             await gristDocReadyPromise;
             console.log("[WIDGET] initGristData: grist.doc is ready. Proceeding to fetch categories.");
 
@@ -197,13 +197,15 @@
          * Generates and triggers the download of a PDF report for the current record.
          */
         async function generatePdfReport() {
+            console.log("[WIDGET] generatePdfReport called.");
             if (!currentRecord || !currentRecordId) {
                 console.warn("[WIDGET] No record selected for PDF generation.");
                 alert("Please select an event record first.");
                 return;
             }
 
-            // New: Wait for grist.doc to be ready before fetching expenses
+            // Wait for grist.doc to be ready before fetching expenses
+            console.log("[WIDGET] generatePdfReport: Awaiting grist.doc readiness...");
             await gristDocReadyPromise;
             console.log("[WIDGET] generatePdfReport: grist.doc is ready. Proceeding to fetch expenses.");
 
@@ -213,6 +215,7 @@
 
             try {
                 // Fetch fonts that support Unicode (including Greek characters)
+                console.log("[WIDGET] Fetching fonts...");
                 const fontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-R.ttf';
                 const boldFontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-B.ttf';
 
@@ -220,11 +223,13 @@
                     fetch(fontUrl).then(res => res.arrayBuffer()),
                     fetch(boldFontUrl).then(res => res.arrayBuffer())
                 ]);
+                console.log("[WIDGET] Fonts fetched.");
 
                 const pdfDoc = await PDFDocument.create();
                 pdfDoc.registerFontkit(fontkit); // Register fontkit with pdf-lib
                 const customFont = await pdfDoc.embedFont(fontBytes);
                 const customBoldFont = await pdfDoc.embedFont(boldFontBytes);
+                console.log("[WIDGET] PDF document created and fonts embedded.");
 
                 let page = pdfDoc.addPage();
                 let y = page.getHeight() - 50; // Start from top with margin
@@ -237,9 +242,11 @@
                 const addNewPage = () => {
                     page = pdfDoc.addPage();
                     y = page.getHeight() - margin; // Reset y for new page
+                    console.log("[WIDGET] Added new page to PDF.");
                 };
 
                 // --- Event Details Section ---
+                console.log("[WIDGET] Adding event details to PDF.");
                 page.drawText('ΑΝΑΛΥΤΙΚΟΣ ΠΡΟΥΠΟΛΟΓΙΣΜΟΣ ΔΙΟΡΓΑΝΩΣΗΣ', {
                     x,
                     y,
@@ -288,6 +295,7 @@
                 y -= lineHeight * 2; // Extra space before expenses
 
                 // --- Expenses Section ---
+                console.log("[WIDGET] Adding expenses section to PDF.");
                 page.drawText('ΚΑΤΗΓΟΡΙΕΣ ΕΞΟΔΩΝ', {
                     x,
                     y,
@@ -298,6 +306,7 @@
                 y -= 20;
 
                 // Fetch Expenses for the current selected Event
+                console.log("[WIDGET] Fetching expenses for event ID:", currentRecordId);
                 const expensesForEvent = await grist.doc.fetchTable('Expenses', { filters: { Event: [currentRecordId] } });
                 console.log("[WIDGET] Fetched expenses:", expensesForEvent);
 
@@ -330,6 +339,7 @@
                         console.warn(`[WIDGET] Expense category with ID ${categoryId} not found in map.`);
                     }
                 });
+                console.log("[WIDGET] Expenses grouped and aggregated. Grand Total:", grandTotal);
 
                 // Convert groupedExpenses object to an array and sort by displayOrder
                 const sortedGroups = Object.values(groupedExpenses).sort((a, b) => a.displayOrder - b.displayOrder);
@@ -424,7 +434,7 @@
                     color: rgb(0.17, 0.24, 0.31),
                 });
 
-
+                console.log("[WIDGET] Finalizing PDF and saving.");
                 const pdfBytes = await pdfDoc.save();
                 const filename = `Event_Budget_Report_${currentRecord.$EventCode || currentRecord.EventCode || 'Unknown'}.pdf`; // Use $EventCode or EventCode for filename
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
@@ -461,6 +471,12 @@
         });
         console.log("[WIDGET] grist.ready() called.");
 
+        // NEW in v4.23: Explicitly check grist.doc readiness immediately after grist.ready.
+        // This resolves the promise early if grist.doc is already available.
+        if (typeof grist !== 'undefined' && typeof grist.doc !== 'undefined') {
+            resolveGristDocReady();
+            console.log("[WIDGET] grist.doc confirmed ready (via initial check after grist.ready).");
+        }
 
         // Use grist.onRecord to listen for selections in the linked table.
         grist.onRecord(updateUI);
@@ -501,9 +517,10 @@
         debugButton.disabled = false;
 
         // Initialize Grist data (like expense categories) after initial setup
-        // This will now wait for gristDocReadyPromise internally
+        // This will now await the promise which is resolved either immediately
+        // after grist.ready or when the first updateUI is triggered.
         initGristData();
-        console.log("[WIDGET] initGristData() called for initial data fetch.");
+        console.log("[WIDGET] initGristData() called for initial data fetch (will await grist.doc readiness).");
 
     </script>
 </body>
