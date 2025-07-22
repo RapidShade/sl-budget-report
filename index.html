@@ -1,15 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Event PDF Generator</title>
-  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <meta charset="UTF-8">
+  <title>Event Budget Report</title>
+  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+  <script src="widget.js" defer></script>
 </head>
 <body>
-  <h3>📰 Event PDF Report</h3>
-  <div id="status">Waiting for event selection…</div>
+  <h2>Generate Event Budget PDF</h2>
+  <p id="status">Waiting for selection...</p>
   <button id="btn" disabled>Download PDF</button>
-
-  <script src="widget.js"></script>
 </body>
 </html>

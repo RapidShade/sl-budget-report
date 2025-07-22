@@ -1,10 +1,6 @@
 {
-  "name": "Event PDF Report Generator",
-  "version": "1.2",
-  "description": "Generates grouped PDF from Expenses for selected Event",
-  "access": "read table",
-  "widgetConfig": {
-    "requiredTables": ["Events", "Expenses", "ExpenseCategories"],
-    "selectBy": "Events"
-  }
+  "name": "Budget PDF Widget",
+  "version": "2.2",
+  "access": "full",
+  "dependencies": []
 }
