@@ -86,7 +86,7 @@
     </div>
 
     <script>
-        console.log("[WIDGET] v5.0 Starting");
+        console.log("[WIDGET] v5.1 Starting");
 
         // Ensure pdf-lib is loaded
         if (typeof PDFLib === 'undefined') {
@@ -152,10 +152,22 @@
             downloadPdfButton.textContent = 'Generating...';
 
             try {
+                // Fetch fonts that support Unicode (including Greek characters)
+                const fontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-R.ttf';
+                const boldFontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-B.ttf';
+
+                const [fontBytes, boldFontBytes] = await Promise.all([
+                    fetch(fontUrl).then(res => res.arrayBuffer()),
+                    fetch(boldFontUrl).then(res => res.arrayBuffer())
+                ]);
+
                 const pdfDoc = await PDFDocument.create();
+
+                // Embed the custom fonts
+                const customFont = await pdfDoc.embedFont(fontBytes);
+                const customBoldFont = await pdfDoc.embedFont(boldFontBytes);
+
                 const page = pdfDoc.addPage();
-                const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-                const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
                 const {
                     EventCode, Name, Sport, Discipline, DateStart, DateEnd,
@@ -166,7 +178,7 @@
                 const x = 50;
                 const lineHeight = 20;
 
-                page.drawText('Event Report', { x, y, font: boldFont, size: 24, color: rgb(0.1, 0.1, 0.1) });
+                page.drawText('Event Report', { x, y, font: customBoldFont, size: 24, color: rgb(0.1, 0.1, 0.1) });
                 y -= 40;
 
                 const addDetail = (label, value) => {
@@ -174,9 +186,9 @@
                         page = pdfDoc.addPage();
                         y = 780;
                     }
-                    page.drawText(`${label}: `, { x, y, font: boldFont, size: 12 });
-                    const labelWidth = boldFont.widthOfTextAtSize(`${label}: `, 12);
-                    page.drawText(String(value || 'N/A'), { x: x + labelWidth + 2, y, font, size: 12 });
+                    page.drawText(`${label}: `, { x, y, font: customBoldFont, size: 12 });
+                    const labelWidth = customBoldFont.widthOfTextAtSize(`${label}: `, 12);
+                    page.drawText(String(value || 'N/A'), { x: x + labelWidth + 2, y, font: customFont, size: 12 });
                     y -= lineHeight;
                 };
 
@@ -207,7 +219,7 @@
 
             } catch (error) {
                 console.error("[WIDGET] Error generating PDF:", error);
-                recordInfoElement.textContent = 'Error creating PDF. See console.';
+                recordInfoElement.textContent = 'Error creating PDF. Check console.';
             } finally {
                 downloadPdfButton.disabled = false;
                 downloadPdfButton.textContent = 'Download PDF Report';
@@ -223,13 +235,11 @@
         }
 
         // Signal to Grist that the widget is ready and requires full access.
-        // This is the modern way to handle permissions.
         grist.ready({
             requiredAccess: 'full'
         });
 
         // Use grist.onRecord to listen for selections in the linked table.
-        // This is the primary way to get data into the widget.
         grist.onRecord(updateUI);
 
         // --- EVENT LISTENERS ---
