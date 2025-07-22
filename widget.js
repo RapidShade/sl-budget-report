@@ -1,30 +1,37 @@
-console.log("[WIDGET] v1.1 Starting...");
+console.log("[WIDGET] v1.2 Starting via postMessage…");
 
-let gristDoc = null;
+let api = null;
 let selectedEvent = null;
 let expenses = [];
 let categories = {};
 
-window.grist.ready({ requiredAccess: "read table" }).then(api => {
-  gristDoc = api;
+function logStatus(msg) {
+  const el = document.getElementById("status");
+  if (el) el.textContent = msg;
+}
 
-  gristDoc.onRecord(async (record) => {
+window.addEventListener("message", async (event) => {
+  if (!event.data?.gristDocAPI) return;
+  api = event.data.gristDocAPI;
+  logStatus("✅ Grist API ready.");
+
+  api.onRecord(async (record) => {
     if (!record || !record.id) {
       selectedEvent = null;
-      document.getElementById("status").textContent = "⚠️ Select an event.";
+      logStatus("⚠️ Select an event.");
       return;
     }
 
     selectedEvent = record;
-    document.getElementById("status").textContent = "✅ Selected Event: " + (record.Title || '[Untitled]');
+    logStatus("✅ Selected: " + (record.Title || "Unnamed Event"));
     await loadData();
   });
 });
 
 async function loadData() {
   try {
-    const expensesTable = await gristDoc.docApi.fetchTable("Expenses");
-    const categoryTable = await gristDoc.docApi.fetchTable("ExpenseCategories");
+    const expensesTable = await api.docApi.fetchTable("Expenses");
+    const categoryTable = await api.docApi.fetchTable("ExpenseCategories");
 
     categories = {};
     for (const cat of categoryTable.records) {
@@ -39,9 +46,10 @@ async function loadData() {
         category: categories[r.fields.ExpenseCategory] || 'Χωρίς Κατηγορία'
       }));
 
-    console.log("[WIDGET] Expenses loaded:", expenses.length);
+    console.log("[WIDGET] Loaded", expenses.length, "expenses.");
   } catch (e) {
-    console.error("[WIDGET] Error loading tables:", e);
+    console.error("Error loading data:", e);
+    logStatus("❌ Error loading data");
   }
 }
 
