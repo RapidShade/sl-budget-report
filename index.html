@@ -72,7 +72,7 @@
         }
     </style>
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
-    <script src="/grist-plugin-api.js"></script>
+    <script src="https://sportsledger.koe.org.gr/grist-plugin-api.js"></script>
 </head>
 <body>
     <div class="container" id="widget-container">
@@ -84,7 +84,7 @@
     </div>
 
     <script>
-        console.log("[WIDGET] v4.16c Starting"); // Version updated for tracking
+        console.log("[WIDGET] v4.17 Starting"); // Version updated to 4.17
 
         const { PDFDocument, rgb, StandardFonts } = PDFLib;
         const messageElement = document.getElementById('message');
@@ -207,10 +207,10 @@
 
         // --- CORRECT GRIST API INITIALIZATION WITH DIAGNOSTICS ---
         console.log("[WIDGET] Checking grist object: ", typeof grist);
-        // Using a setTimeout for diagnostic purposes to rule out extremely fast race conditions
+        // Using a setTimeout for diagnostic purposes to allow Grist API to fully populate
         setTimeout(() => {
             if (typeof grist === 'undefined') {
-                messageElement.textContent = "Error: Grist API is not loaded. Ensure the widget is running in Grist.";
+                messageElement.textContent = "Error: Grist API is not loaded. Ensure the widget is running in Grist and the grist-plugin-api.js URL is correct.";
                 const container = document.getElementById('widget-container');
                 if (container) {
                     container.innerHTML = '<div class="error-message">Error: Grist API not loaded. Check console for details.</div>';
@@ -269,7 +269,7 @@
                     }
                 });
             }
-        }, 100); // Small delay to allow Grist API to fully populate
+        }, 100);
         // --- END CORRECT GRIST API INITIALIZATION ---
 
 
