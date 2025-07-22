@@ -1,43 +1,28 @@
-console.log("[WIDGET] v0.4 Starting PDF widget...");
+console.log("[WIDGET] v0.5 Starting PDF widget...");
 
 let selectedEvent = null;
 let expenses = [];
 let categories = {};
 let gristDoc = null;
 
-window.addEventListener("message", (event) => {
-  if (!window.grist && event.data && event.data.gristDocAPI) {
-    console.log("[WIDGET] Injected Grist API via postMessage");
-    window.grist = event.data.gristDocAPI;
-    init();
-  }
-});
+window.grist.ready({ requiredAccess: "read table" }).then(api => {
+  console.log("[WIDGET] Grist API ready");
+  gristDoc = api;
 
-function init() {
-  if (!window.grist) {
-    console.error("[WIDGET] Grist API is not defined.");
-    return;
-  }
+  gristDoc.onRecord((record) => {
+    if (!record) {
+      console.warn("[WIDGET] No record selected");
+      selectedEvent = null;
+      document.getElementById('status').textContent = "⚠️ Select an event to generate report.";
+      return;
+    }
 
-  window.grist.ready({ requiredAccess: "read table" }).then(api => {
-    console.log("[WIDGET] Grist API ready");
-    gristDoc = api;
-
-    gristDoc.onRecord((record) => {
-      if (!record) {
-        console.warn("[WIDGET] No record selected");
-        selectedEvent = null;
-        document.getElementById('status').textContent = "⚠️ Select an event to generate report.";
-        return;
-      }
-
-      selectedEvent = record;
-      console.log("[WIDGET] Selected Event:", selectedEvent);
-      document.getElementById('status').textContent = "✅ Selected Event: " + (record.Title || '[Untitled]');
-      loadData();
-    });
+    selectedEvent = record;
+    console.log("[WIDGET] Selected Event:", selectedEvent);
+    document.getElementById('status').textContent = "✅ Selected Event: " + (record.Title || '[Untitled]');
+    loadData();
   });
-}
+});
 
 async function loadData() {
   try {
