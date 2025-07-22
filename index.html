@@ -46,6 +46,7 @@
             font-size: 1.1em;
             transition: background-color 0.3s ease;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin: 5px; /* Add some margin for the new button */
         }
         button:hover {
             background-color: #45a049;
@@ -78,11 +79,11 @@
         <h2>Event PDF Budget Report</h2>
         <p id="message">Select an event to generate a PDF report.</p>
         <button id="downloadPdfButton" style="display: none;">Download PDF Report</button>
-        <div id="record-info"></div>
+        <button id="debugButton" style="display: block;">Debug Record Fetch</button> <div id="record-info"></div>
     </div>
 
     <script>
-        console.log("[WIDGET] v4.8 Starting"); // Version updated to 4.8
+        console.log("[WIDGET] v4.9 Starting"); // Version updated to 4.9
 
         // --- Diagnostic Check ---
         if (typeof grist === 'undefined') {
@@ -99,6 +100,7 @@
         const { PDFDocument, rgb, StandardFonts } = PDFLib;
         const messageElement = document.getElementById('message');
         const downloadPdfButton = document.getElementById('downloadPdfButton');
+        const debugButton = document.getElementById('debugButton'); // Get reference to new debug button
         const recordInfoElement = document.getElementById('record-info');
         let currentRecord = null;
         let currentRecordId = null;
@@ -172,82 +174,4 @@
                         color: rgb(0, 0, 0),
                     });
                     const labelWidth = boldFont.widthOfTextAtSize(`${label}: `, 12);
-                    page.drawText(String(value || 'N/A'), {
-                        x: x + labelWidth + 5,
-                        y,
-                        font: font,
-                        size: 12,
-                        color: rgb(0, 0, 0),
-                    });
-                    y -= lineHeight;
-                };
-
-                addDetail('Event Code', $EventCode);
-                addDetail('Name', $Name);
-                addDetail('Sport', $Sport);
-                addDetail('Discipline', $Discipline);
-                addDetail('Start Date', startDateFormatted);
-                addDetail('End Date', endDateFormatted);
-                addDetail('CITY', $CITY);
-                addDetail('VENUE', $VENUE);
-                addDetail('LEVEL', $LEVEL);
-                addDetail('POOL_SIZE', $POOL_SIZE);
-                addDetail('Organiser', $Organiser);
-
-                const pdfBytes = await pdfDoc.save();
-                const filename = `Event_Report_${$EventCode || 'Unknown'}.pdf`;
-
-                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = filename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(link.href);
-
-                console.log(`[WIDGET] PDF generated and downloaded: ${filename}`);
-
-            } catch (error) {
-                console.error("[WIDGET] Error generating PDF:", error);
-                alert("Failed to generate PDF report. Check your browser's console for details.");
-            }
-        }
-
-        // Grist API initialization: Request full access
-        grist.ready({
-            requiredAccess: 'full'
-        });
-
-        // Register the onRecord handler separately
-        grist.on('record', (record, mappings) => {
-            currentRecord = record;
-            currentRecordId = record ? record.id : null;
-
-            console.log("[WIDGET] grist.onRecord triggered.");
-            console.log("[WIDGET] Current record data:", currentRecord);
-            console.log("[WIDGET] Current record ID:", currentRecordId);
-            console.log("[WIDGET] Mappings provided:", mappings);
-
-            if (currentRecord && Object.keys(currentRecord).length > 0) {
-                messageElement.style.display = 'none';
-                downloadPdfButton.style.display = 'block';
-                recordInfoElement.textContent = `Selected Event: ${currentRecord.$Name || currentRecord.$EventCode || 'Unnamed Event'}`;
-                downloadPdfButton.disabled = false;
-                console.log("[WIDGET] Event record detected. Button enabled.");
-            } else {
-                messageElement.style.display = 'block';
-                downloadPdfButton.style.display = 'none';
-                recordInfoElement.textContent = '';
-                downloadPdfButton.disabled = true;
-                console.log("[WIDGET] No event record selected. Button disabled.");
-            }
-        });
-
-        // Attach event listener to the download button
-        downloadPdfButton.addEventListener('click', generatePdfReport);
-
-        console.log("[WIDGET] Grist API ready callback registered and event listener set up.");
-    </script>
-</body>
-</html>
+                    page.drawText(String(value || '
