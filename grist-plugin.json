@@ -1,6 +1,4 @@
 {
-  "name": "Budget PDF Widget",
-  "version": "2.2",
-  "access": "full",
-  "dependencies": []
+  "accessLevel": "full",
+  "requiredAccess": "full"
 }
