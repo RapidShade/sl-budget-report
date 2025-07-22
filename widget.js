@@ -1,33 +1,49 @@
-console.log("[WIDGET] v0.2 Starting PDF widget...");
+console.log("[WIDGET] v0.3 Starting PDF widget...");
 
 let gristDoc = null;
 let selectedEvent = null;
 let expenses = [];
 let categories = {};
 
-window.grist.ready({ requiredAccess: 'read table' }).then(api => {
-  console.log("[WIDGET] Grist API ready");
-  gristDoc = api;
+window.addEventListener("message", (event) => {
+  if (!window.grist && event.data && event.data.gristDocAPI) {
+    console.log("[WIDGET] Injecting Grist API context from postMessage");
+    window.grist = event.data.gristDocAPI;
+    initializeGristWidget();
+  }
+});
 
-  if (!gristDoc || !gristDoc.docApi) {
-    console.error("[WIDGET] ❌ Grist API or docApi not available. Check access level.");
-    document.getElementById('status').textContent = "❌ No access to Grist document.";
+function initializeGristWidget() {
+  if (!window.grist) {
+    console.error("[WIDGET] Grist API not available.");
+    document.getElementById('status').textContent = "❌ Grist API not injected.";
     return;
   }
 
-  gristDoc.onRecord((record) => {
-    if (!record) {
-      console.warn("[WIDGET] No event record selected.");
-      document.getElementById('status').textContent = "⚠️ Select an event to generate report.";
+  window.grist.ready({ requiredAccess: 'read table' }).then(api => {
+    console.log("[WIDGET] Grist API ready");
+    gristDoc = api;
+
+    if (!gristDoc || !gristDoc.docApi) {
+      console.error("[WIDGET] ❌ Grist docApi missing.");
+      document.getElementById('status').textContent = "❌ Grist doc API not available.";
       return;
     }
 
-    selectedEvent = record;
-    document.getElementById('status').textContent = '✅ Selected Event: ' + (record.Title || '[Untitled]');
-    console.log("[WIDGET] Selected event:", selectedEvent);
-    loadData();
+    gristDoc.onRecord((record) => {
+      if (!record) {
+        console.warn("[WIDGET] No event record selected.");
+        document.getElementById('status').textContent = "⚠️ Select an event to generate report.";
+        return;
+      }
+
+      selectedEvent = record;
+      document.getElementById('status').textContent = '✅ Selected Event: ' + (record.Title || '[Untitled]');
+      console.log("[WIDGET] Selected event:", selectedEvent);
+      loadData();
+    });
   });
-});
+}
 
 async function loadData() {
   try {
