@@ -71,8 +71,9 @@
             border-radius: 5px;
         }
     </style>
-    <!-- Ensure you are using the correct and latest pdf-lib version -->
+    <!-- Load pdf-lib and its fontkit extension -->
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    <script src="https://unpkg.com/@pdf-lib/fontkit/dist/fontkit.umd.min.js"></script>
     <!-- This is the Grist plugin API script provided in your original file -->
     <script src="https://sportsledger.koe.org.gr/grist-plugin-api.js"></script>
 </head>
@@ -86,15 +87,15 @@
     </div>
 
     <script>
-        console.log("[WIDGET] v5.1 Starting");
+        console.log("[WIDGET] v5.2 Starting");
 
-        // Ensure pdf-lib is loaded
-        if (typeof PDFLib === 'undefined') {
-            document.getElementById('widget-container').innerHTML = '<div class="error-message">Error: PDF Library not loaded.</div>';
-            throw new Error("PDF-Lib not found.");
+        // Ensure pdf-lib and fontkit are loaded
+        if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
+            document.getElementById('widget-container').innerHTML = '<div class="error-message">Error: PDF Libraries not loaded.</div>';
+            throw new Error("PDF-Lib or fontkit not found.");
         }
 
-        const { PDFDocument, rgb, StandardFonts } = PDFLib;
+        const { PDFDocument, rgb } = PDFLib;
         const messageElement = document.getElementById('message');
         const downloadPdfButton = document.getElementById('downloadPdfButton');
         const debugButton = document.getElementById('debugButton');
@@ -162,6 +163,9 @@
                 ]);
 
                 const pdfDoc = await PDFDocument.create();
+
+                // Register fontkit with pdf-lib
+                pdfDoc.registerFontkit(fontkit);
 
                 // Embed the custom fonts
                 const customFont = await pdfDoc.embedFont(fontBytes);
