@@ -1,6 +1,6 @@
 {
   "name": "Event Report PDF Generator",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Generates a grouped PDF report from Expenses for a selected Event.",
   "author": "ChatGPT",
   "homepage": "",

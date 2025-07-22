@@ -1,4 +1,4 @@
-console.log("[WIDGET] v0.5 Starting PDF widget...");
+console.log("[WIDGET] v0.6 Starting PDF widget...");
 
 let selectedEvent = null;
 let expenses = [];
