@@ -71,7 +71,7 @@
         }
     </style>
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
-    <script src="https://unpkg.com/@gristlabs/grist-api/dist/grist-api.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@gristlabs/grist-api@latest/dist/grist-api.min.js"></script>
 </head>
 <body>
     <div class="container" id="widget-container">
@@ -82,14 +82,14 @@
     </div>
 
     <script>
-        console.log("[WIDGET] v4.4 Starting"); // Version updated to 4.4
+        console.log("[WIDGET] v4.5 Starting"); // Version updated to 4.5
 
         // --- Diagnostic Check ---
         if (typeof grist === 'undefined') {
-            console.error("[WIDGET] CRITICAL ERROR: 'grist' object is not defined. Grist API script (grist-api.min.js) might not have loaded correctly or is blocked.");
+            console.error("[WIDGET] CRITICAL ERROR: 'grist' object is not defined. Grist API script (grist-api.min.js) might not have loaded correctly or is blocked. Check network tab for 404/failures, and console for CSP errors.");
             const container = document.getElementById('widget-container');
             if (container) {
-                container.innerHTML = '<div class="error-message">Error: Grist API not loaded. Please ensure the widget URL is correct and network access to `grist-api.min.js` (from unpkg.com) is allowed. Check your browser\'s Developer Console (F12) & Network Tab for errors.</div>';
+                container.innerHTML = '<div class="error-message">Error: Grist API not loaded. Please ensure the widget URL is correct and network access to the Grist API script is allowed (check browser console/network tab for errors like 404 or CSP).</div>';
             }
             // Stop further script execution if Grist API is not available
             throw new Error("Grist API not available. Cannot initialize widget.");
