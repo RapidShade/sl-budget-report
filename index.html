@@ -112,7 +112,7 @@
   </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v8.8 ▶️ Radio fix, spacing, final grand total, taller rectangles");
+  console.log("RapidShade: [WIDGET] v8.8.1 ▶️ Section totals styled & combined total fixed");
 
   // Configurable section headers
   const SECTION_HEADERS = {
@@ -321,7 +321,8 @@
   }
 
   // Main PDF generation, now honoring the selected report type,
-  // adding a final combined grand-total, extra spacing, taller rectangles.
+  // styling section totals with dark bar + white text,
+  // ensuring final combined total correct and right-aligned.
   async function generatePdf() {
     const btn = document.getElementById('downloadPdfButton');
     btn.disabled = true;
@@ -365,7 +366,7 @@
       // Which report?
       const rpt = document.querySelector('input[name=reportType]:checked').value;
 
-      // Title
+      // Draw report title
       const titleText = rpt === 'combined'
                       ? 'Combined Report'
                       : rpt === 'revenues'
@@ -374,7 +375,7 @@
       page.drawText(titleText, { x: left, y, font: ub, size: 18 });
       y -= 25;
 
-      // Event Details header
+      // Draw Event Details header
       page.drawText('Event Details', { x: left, y, font: ub, size: 16 });
       y -= 30;
 
@@ -401,22 +402,22 @@
       });
       y -= Math.ceil(fields.length / 2) * 18 + 20;  // extra gap
 
-      // Section builder
+      // Function to build each PDF section
       async function buildSection(headers, details, cats, refField, key) {
         // Filter only this event
         const recs = headers.filter(h => {
           const r = h.Event;
           return Array.isArray(r) ? r[1] === currentRecord.id : r === currentRecord.id;
         });
-        if (!recs.length) return;
+        if (!recs.length) return 0;
 
-        // In Combined, start Revenues on a new page
+        // In Combined, start Revenues on new page
         if (rpt === 'combined' && key === 'revenues') {
           page = pdfDoc.addPage();
           y = height - 50;
         }
 
-        // Draw sub-header background (taller) BEFORE text
+        // Draw sub-header background (taller) THEN text
         page.drawRectangle({
           x: left - 5,
           y: y - 4,
@@ -424,20 +425,20 @@
           height: 20,
           color: PDFLib.rgb(0.9, 0.9, 0.9),
         });
-        // Then draw sub-header text
         page.drawText(SECTION_HEADERS[key], { x: left, y, font: ub, size: 16 });
         y -= 28;
 
-        // Iterate each group
         let sectionSum = 0;
+
+        // Loop groups
         for (let h of recs) {
-          // Reserve space: header + 3 lines + subtotal
+          // Reserve space
           if (y < 120) {
             page = pdfDoc.addPage();
             y = height - 50;
           }
 
-          // Draw group-header background (taller) THEN text
+          // Group-header background THEN text
           page.drawRectangle({
             x: left - 5,
             y: y - 4,
@@ -470,7 +471,7 @@
             if (enablePdfDetailLines) {
               page.drawLine({
                 start: { x: left + 20, y: y - 2 },
-                end:   { x: right,       y: y - 2 },
+                end:   { x: right,      y: y - 2 },
                 thickness: pdfDetailLineWidth,
                 color: pdfDetailLineColor
               });
@@ -484,81 +485,88 @@
             page = pdfDoc.addPage();
             y = height - 50;
           }
-          const sumTxt = fmtCurr(groupSum);
+          const groupTxt = fmtCurr(groupSum);
           page.drawText('Group Total:', {
-            x: right - 80 - ub.widthOfTextAtSize(sumTxt,12),
+            x: right - 80 - ub.widthOfTextAtSize(groupTxt,12),
             y, font: ub, size: 12
           });
-          page.drawText(sumTxt, {
-            x: right - ub.widthOfTextAtSize(sumTxt,12),
+          page.drawText(groupTxt, {
+            x: right - ub.widthOfTextAtSize(groupTxt,12),
             y, font: ub, size: 12
           });
           y -= 28;
           sectionSum += groupSum;
         }
 
-        // Section subtotal
-        if (y < 60) {
+        // Section total styled like grand-total
+        if (y < 80) {
           page = pdfDoc.addPage();
           y = height - 50;
         }
         const secTxt = `TOTAL ${key.toUpperCase()}: ${fmtCurr(sectionSum)}`;
+        const txtW   = ub.widthOfTextAtSize(secTxt,14);
+        const rectW  = txtW + 20;
+        const rectX  = right - rectW;
+        // dark bar background
+        page.drawRectangle({
+          x: rectX,
+          y: y - 4,
+          width: rectW,
+          height: 20,
+          color: PDFLib.rgb(0.17,0.24,0.31),
+        });
+        // white text
         page.drawText(secTxt, {
-          x: right - ub.widthOfTextAtSize(secTxt,14),
-          y, font: ub, size: 14
+          x: rectX + 10,
+          y, font: ub, size: 14,
+          color: PDFLib.rgb(1,1,1)
         });
         y -= 30;
 
         return sectionSum;
       }
 
-      // Build only the sections we need
+      // Build only the needed sections
       let totalExpenses = 0, totalRevenues = 0;
       if (rpt === 'expenses' || rpt === 'combined') {
-        totalExpenses = await buildSection(
-          allExpenses, allExpenseDetails, allExpenseCats,
-          'Expense','expenses'
-        ) || 0;
+        totalExpenses = await buildSection(allExpenses, allExpenseDetails, allExpenseCats, 'Expense','expenses');
       }
       if (rpt === 'revenues' || rpt === 'combined') {
-        totalRevenues = await buildSection(
-          allRevenues, allRevenueDetails, allRevenueCats,
-          'Revenue','revenues'
-        ) || 0;
+        totalRevenues = await buildSection(allRevenues, allRevenueDetails, allRevenueCats, 'Revenue','revenues');
       }
 
-      // Final Combined Grand Total (only if combined)
+      // Final combined grand total
       if (rpt === 'combined') {
-        // New page if close to footer
         if (y < 80) {
           page = pdfDoc.addPage();
           y = height - 50;
         }
-        // Draw dark bar background
+        const grandSum = totalExpenses + totalRevenues;
+        const grandTxt = fmtCurr(grandSum);
+        const rectW    = ub.widthOfTextAtSize(`GRAND TOTAL: ${grandTxt}`,14) + 20;
+        const rectX    = right - rectW;
+        // dark bar
         page.drawRectangle({
-          x: left,
-          y: y - 20,
-          width: right - left,
-          height: 30,
-          color: PDFLib.rgb(0.17,0.24,0.31),  // #2c3e50
+          x: rectX,
+          y: y - 4,
+          width: rectW,
+          height: 20,
+          color: PDFLib.rgb(0.17,0.24,0.31),
         });
-        // White text on top
-        const grand = fmtCurr(totalExpenses + totalRevenues);
-        page.drawText(`GRAND TOTAL: ${grand}`, {
-          x: left + 10,
-          y: y - 12,
-          font: ub,
-          size: 14,
+        // white text
+        page.drawText(`GRAND TOTAL: ${grandTxt}`, {
+          x: rectX + 10,
+          y, font: ub, size: 14,
           color: PDFLib.rgb(1,1,1)
         });
-        y -= 50;
+        y -= 30;
       }
 
-      // Footer & page numbering
+      // Footer & pagination
       const pages = pdfDoc.getPages();
       const ts = new Date().toLocaleString('el-GR');
       pages.forEach((pg,i) => {
-        pg.drawText(`Date: ${ts}`, { x:50,  y:20, font: uf, size:8 });
+        pg.drawText(`Date: ${ts}`, { x:50, y:20, font: uf, size:8 });
         pg.drawText('Generated by RapidShade Widget', { x:170, y:20, font: uf, size:8 });
         const pn = `Page ${i+1} of ${pages.length}`;
         pg.drawText(pn, {
@@ -581,13 +589,12 @@
       console.error("PDF gen error:", err);
       document.getElementById('record-info').textContent = 'Error generating PDF.';
     } finally {
-      const btn = document.getElementById('downloadPdfButton');
       btn.disabled = false;
       btn.textContent = 'Download PDF Report';
     }
   }
 
-  // Initialize Grist plugin: request all Event fields
+  // Initialize Grist plugin
   grist.ready({
     requiredAccess: 'full',
     columns: [
@@ -596,13 +603,13 @@
     ]
   });
 
-  // Initial data fetch & listeners
+  // Fetch data and set up listeners
   fetchData();
   grist.onRecord(onRecordUpdate);
   document.querySelectorAll('input[name=reportType]')
-          .forEach(radio => radio.addEventListener('change', renderHtmlReport));
+    .forEach(radio => radio.addEventListener('change', renderHtmlReport));
   document.getElementById('downloadPdfButton')
-          .addEventListener('click', generatePdf);
+    .addEventListener('click', generatePdf);
   setTimeout(initialRender, 200);
 </script>
 </body>
