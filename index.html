@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Event PDF Budget Report Widget</title>
+    <title>Event PDF Budget & Revenue Report Widget</title>
     <meta charset="utf-8">
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+                         Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
             color: #333;
             margin: 0;
             padding: 20px;
@@ -62,6 +63,14 @@
             cursor: not-allowed;
             box-shadow: none;
         }
+        input[type="radio"] {
+            margin-right: 5px;
+        }
+        label {
+            margin-right: 15px;
+            font-size: 0.95em;
+            color: #555;
+        }
         #record-info {
             margin-top: 15px;
             font-size: 0.9em;
@@ -101,17 +110,17 @@
         .detail-item strong {
             color: #495057;
         }
-        .expense-group {
+        .expense-group, .revenue-group {
             margin-bottom: 20px;
         }
-        .expense-group h3 {
+        .expense-group h3, .revenue-group h3 {
             background-color: #e9ecef;
             padding: 10px;
             border-radius: 4px;
             color: #495057;
             margin: 0 0 10px 0;
         }
-        .expense-item, .group-summary {
+        .expense-item, .revenue-item, .group-summary {
             display: flex;
             justify-content: space-between;
             padding: 8px 10px;
@@ -134,10 +143,11 @@
             font-size: 1.2em;
             border-radius: 4px;
         }
-        .expense-item:last-child {
+        .expense-item:last-child, .revenue-item:last-child {
             border-bottom: none;
         }
     </style>
+
     <!-- pdf-lib and fontkit libraries for PDF generation -->
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <script src="https://unpkg.com/@pdf-lib/fontkit/dist/fontkit.umd.min.js"></script>
@@ -146,17 +156,21 @@
 </head>
 <body>
     <div class="container" id="widget-container">
-        <h2>Event PDF Budget Report</h2>
+        <h2>Event PDF Report</h2>
         <p id="message">Connecting to Grist... Please select an event record.</p>
         <div class="button-container">
-            <button id="downloadPdfButton" style="display: none;" disabled>Download PDF Report</button>
+            <!-- REPORT TYPE SELECTOR -->
+            <label><input type="radio" name="reportType" value="expenses" checked>Expenses</label>
+            <label><input type="radio" name="reportType" value="revenues">Revenues</label>
+            <label><input type="radio" name="reportType" value="combined">Combined</label>
+            <button id="downloadPdfButton" style="margin-left:20px;" disabled>Download PDF Report</button>
         </div>
         <div id="record-info"></div>
         <div id="report-container"></div>
     </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v7.11 Starting");
+  console.log("RapidShade: [WIDGET] v7.12 Adding Revenues & Combined Reports");
 
   // Ensure PDF-lib and fontkit are loaded
   if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
@@ -174,127 +188,263 @@
   let currentRecord = null;
   let allExpenseDetails = [];
   let allExpenseCategories = [];
+  let allRevenueDetails = [];
+  let allRevenueCategories = [];
 
   // Helper to format currency
-  const formatCurrency = (amount) =>
-    (amount || 0).toLocaleString('el-GR', { style: 'currency', currency: 'EUR' });
+  const formatCurrency = (amt) =>
+    (amt || 0).toLocaleString('el-GR', { style: 'currency', currency: 'EUR' });
+
+  // Improved formatDate to handle JS Date & UNIX timestamp
+  function formatDate(secOrDate) {
+    if (!secOrDate) { return 'N/A'; }
+    let d = secOrDate instanceof Date
+          ? secOrDate
+          : new Date(secOrDate * 1000);
+    return isNaN(d) ? 'Invalid Date' : d.toLocaleDateString('el-GR');
+  }
 
   // Convert Grist table payload to array of records
   function tableToRecords(data) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
       return Array.isArray(data) ? data : [];
     }
-    const columns = Object.keys(data);
-    if (columns.length === 0 || !Array.isArray(data[columns[0]])) {
+    const cols = Object.keys(data);
+    if (!cols.length || !Array.isArray(data[cols[0]])) {
       return [];
     }
-    const numRows = data[columns[0]].length;
-    const records = [];
-    for (let i = 0; i < numRows; i++) {
+    const n = data[cols[0]].length;
+    const recs = [];
+    for (let i = 0; i < n; i++) {
       const rec = {};
-      for (const col of columns) {
-        rec[col] = data[col][i];
+      for (let c of cols) {
+        rec[c] = data[c][i];
       }
-      records.push(rec);
+      recs.push(rec);
     }
-    return records;
+    return recs;
   }
 
-  // Fetch ExpenseDetails + ExpenseCategories
+  // FETCH ALL DATA (Expenses + Revenues)
   async function fetchData() {
     try {
-      const rawDetails    = await grist.docApi.fetchTable('ExpenseDetails');
-      const rawCategories = await grist.docApi.fetchTable('ExpenseCategories');
-      allExpenseDetails    = tableToRecords(rawDetails);
-      allExpenseCategories = tableToRecords(rawCategories);
-      console.log("RapidShade: Fetched ExpenseDetails:", allExpenseDetails.length);
-      console.log("RapidShade: Fetched ExpenseCategories:", allExpenseCategories.length);
-    } catch (error) {
-      console.error("Error fetching data:", error);
+      const [rawEd, rawEc, rawRd, rawRc] = await Promise.all([
+        grist.docApi.fetchTable('ExpenseDetails'),
+        grist.docApi.fetchTable('ExpenseCategories'),
+        grist.docApi.fetchTable('RevenueDetails'),
+        grist.docApi.fetchTable('RevenueCategories'),
+      ]);
+      allExpenseDetails    = tableToRecords(rawEd);
+      allExpenseCategories = tableToRecords(rawEc);
+      allRevenueDetails    = tableToRecords(rawRd);
+      allRevenueCategories = tableToRecords(rawRc);
+      console.log(
+        `Fetched ${allExpenseDetails.length} ExpenseDetails and ${allRevenueDetails.length} RevenueDetails`
+      );
+    } catch (e) {
+      console.error("Error fetching data:", e);
       reportContainer.innerHTML =
         `<div class="error-message">
-           Error fetching data. Check table names ('ExpenseDetails', 'ExpenseCategories')
-           and ensure the widget has 'full' access.
+           Error fetching data. Check tables: ExpenseDetails, ExpenseCategories,
+           RevenueDetails, RevenueCategories.
          </div>`;
     }
   }
 
-  // Render on-screen HTML preview (unchanged)
+  // ON RECORD SELECT
+  function onRecordUpdate(record) {
+    currentRecord = record;
+    if (record && Object.keys(record).length) {
+      messageElement.style.display = 'none';
+      downloadPdfButton.disabled = false;
+      downloadPdfButton.style.display = 'inline-block';
+      recordInfoElement.textContent = `Selected: ${record.Name || 'Unnamed Event'}`;
+      renderHtmlReport();
+    } else {
+      messageElement.style.display = 'block';
+      messageElement.textContent = "Please select a record in the Events table.";
+      downloadPdfButton.style.display = 'none';
+      downloadPdfButton.disabled = true;
+      recordInfoElement.textContent = '';
+      reportContainer.innerHTML = '';
+    }
+  }
+
+  // RENDER HTML PREVIEW (Expenses only)
   function renderHtmlReport() {
     reportContainer.innerHTML = '';
     if (!currentRecord || !allExpenseDetails.length) { return; }
-    /* … your existing renderHtmlReport code here … */
+
+    // Event Details (on-screen)
+    const eventDiv = document.createElement('div');
+    eventDiv.className = 'event-details';
+    eventDiv.innerHTML = `
+      <h3>Event Details</h3>
+      <div class="event-details-grid">
+        <div class="detail-item"><strong>Event Code:</strong> ${currentRecord.EventCode || 'N/A'}</div>
+        <div class="detail-item"><strong>Name:</strong> ${currentRecord.Name || 'N/A'}</div>
+        <div class="detail-item"><strong>Sport:</strong> ${currentRecord.Sport || 'N/A'}</div>
+        <div class="detail-item"><strong>Discipline:</strong> ${currentRecord.Discipline || 'N/A'}</div>
+        <div class="detail-item"><strong>Dates:</strong> ${formatDate(currentRecord.DateStart)} – ${formatDate(currentRecord.DateEnd)}</div>
+        <div class="detail-item"><strong>Location:</strong> ${currentRecord.CITY || 'N/A'}</div>
+        <div class="detail-item"><strong>Venue:</strong> ${currentRecord.VENUE || 'N/A'}</div>
+        <div class="detail-item"><strong>Level:</strong> ${currentRecord.LEVEL || 'N/A'}</div>
+      </div>`;
+    reportContainer.appendChild(eventDiv);
+
+    // Expenses list
+    const details = allExpenseDetails.filter(d => {
+      const ref = d.Event;
+      return Array.isArray(ref) ? ref[1] === currentRecord.id : ref === currentRecord.id;
+    });
+
+    const categoryMap = new Map(
+      allExpenseCategories.map(c => [c.id, c])
+    );
+    let grandTotal = 0;
+    const grouped = details.reduce((acc, d) => {
+      const cid = Array.isArray(d.ExpenseCategory) ? d.ExpenseCategory[1] : d.ExpenseCategory;
+      const cat = categoryMap.get(cid);
+      if (!cat) { return acc; }
+      const name  = cat.Name || 'Uncategorized';
+      const ord   = cat.ExpCatCode || 999;
+      if (!acc[name]) {
+        acc[name] = { items: [], total: 0, ord };
+      }
+      acc[name].items.push({ desc: d.Description || '', amt: d.Budget || 0 });
+      acc[name].total += d.Budget || 0;
+      return acc;
+    }, {});
+
+    Object.entries(grouped)
+      .sort(([,a],[,b]) => a.ord - b.ord)
+      .forEach(([grp, data]) => {
+        const gdiv = document.createElement('div');
+        gdiv.className = 'expense-group';
+        gdiv.innerHTML = `<h3>${grp}</h3>`;
+        data.items.forEach(item => {
+          const iv = document.createElement('div');
+          iv.className = 'expense-item';
+          iv.innerHTML = `<span>${item.desc}</span><span>${formatCurrency(item.amt)}</span>`;
+          gdiv.appendChild(iv);
+        });
+        const sum = document.createElement('div');
+        sum.className = 'group-summary';
+        sum.innerHTML = `<span>Group Total</span><span>${formatCurrency(data.total)}</span>`;
+        gdiv.appendChild(sum);
+        reportContainer.appendChild(gdiv);
+        grandTotal += data.total;
+      });
+
+    const gtot = document.createElement('div');
+    gtot.className = 'grand-total';
+    gtot.innerHTML = `<span>GRAND TOTAL</span><span>${formatCurrency(grandTotal)}</span>`;
+    reportContainer.appendChild(gtot);
   }
 
-  // Improved formatDate to handle JS Date & timestamp
-  function formatDate(secOrDate) {
-    if (!secOrDate) { return 'N/A'; }
-    let d;
-    if (secOrDate instanceof Date) {
-      d = secOrDate;
-    } else if (typeof secOrDate === 'number') {
-      d = new Date(secOrDate * 1000);
+  // DISPATCH BASED ON SELECTOR
+  async function onDownloadClick() {
+    const rpt = document.querySelector('input[name=reportType]:checked').value;
+    if (rpt === 'expenses') {
+      await generateExpenseReport();
+    } else if (rpt === 'revenues') {
+      await generateRevenueReport();
     } else {
-      return 'Invalid Date';
+      await generateCombinedReport();
     }
-    return d.toLocaleDateString('el-GR');
   }
 
-  // PDF generator – now with header, footer, event fields, and page numbers
-  async function generatePdfReport() {
-    console.log("RapidShade: [WIDGET] v7.11 PDF generator with header/footer");
+  // EXPENSES REPORT
+  async function generateExpenseReport() {
+    console.log("Generating Expenses PDF…");
+    await _generatePdf({
+      details: allExpenseDetails,
+      categories: allExpenseCategories,
+      sectionTitle: 'Expenses',
+      isRevenue: false,
+      startNewDoc: true
+    });
+  }
+
+  // REVENUES REPORT
+  async function generateRevenueReport() {
+    console.log("Generating Revenues PDF…");
+    await _generatePdf({
+      details: allRevenueDetails,
+      categories: allRevenueCategories,
+      sectionTitle: 'Revenues',
+      isRevenue: true,
+      startNewDoc: true
+    });
+  }
+
+  // COMBINED REPORT
+  async function generateCombinedReport() {
+    console.log("Generating Combined PDF…");
+    // Create one PDF doc, then append second section
+    await _generatePdf({
+      details: allExpenseDetails,
+      categories: allExpenseCategories,
+      sectionTitle: 'Expenses',
+      isRevenue: false,
+      startNewDoc: true
+    });
+    await _generatePdf({
+      details: allRevenueDetails,
+      categories: allRevenueCategories,
+      sectionTitle: 'Revenues',
+      isRevenue: true,
+      startNewDoc: false
+    });
+  }
+
+  // CORE PDF GENERATOR
+  async function _generatePdf({details, categories, sectionTitle, isRevenue, startNewDoc}) {
     if (!currentRecord) {
-      alert("Please select a record first.");
+      alert("Please select an event first.");
       return;
     }
     downloadPdfButton.disabled = true;
     downloadPdfButton.textContent = 'Generating...';
 
     try {
-      const pdfDoc = await PDFDocument.create();
-      pdfDoc.registerFontkit(fontkit);
-
-      // Fetch Ubuntu fonts
+      // Load fonts
       const fontUrl     = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-R.ttf';
       const boldFontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-B.ttf';
       const [rb, bb] = await Promise.all([
-        fetch(fontUrl).then(r => r.arrayBuffer()),
-        fetch(boldFontUrl).then(r => r.arrayBuffer()),
+        fetch(fontUrl).then(r=>r.arrayBuffer()),
+        fetch(boldFontUrl).then(r=>r.arrayBuffer())
       ]);
-      const ubuntuFont     = await pdfDoc.embedFont(rb);
-      const ubuntuBoldFont = await pdfDoc.embedFont(bb);
 
-      // Create first page
+      // Create or reuse PDFDocument
+      const pdfDoc = startNewDoc
+        ? await PDFDocument.create()
+        : window.pdfDocGlobal;
+      if (startNewDoc) {
+        window.pdfDocGlobal = pdfDoc;
+      }
+      pdfDoc.registerFontkit(fontkit);
+      const uf = await pdfDoc.embedFont(rb);
+      const ub = await pdfDoc.embedFont(bb);
+
+      // Add a page
       let page = pdfDoc.addPage();
       const { width, height } = page.getSize();
-      const leftMargin  = 50;
-      const rightMargin = width - leftMargin;
-      let y = height - 50;
+      const left = 50, right = width - 50;
+      let y = height - 60;
 
-      //
-      // ——— HEADER SECTION ———
-      //
-      // Optional: embed a logo (PNG/JPEG recommended). Uncomment and adjust as needed:
+      // HEADER
+      // Example logo embed (uncomment & adjust):
       // const logoBytes = await fetch('https://koe.org.gr/images/koe_logo.svg').then(r=>r.arrayBuffer());
       // const logoImage = await pdfDoc.embedPng(logoBytes);
-      // const logoDims  = logoImage.scale(0.3);
-      // page.drawImage(logoImage, { x: leftMargin, y: height - logoDims.height - 10,
-      //                             width: logoDims.width, height: logoDims.height });
-      //
-      // Report title (customizable)
-      const reportTitle = 'Event Budget Report';  // ← change this title in code
-      page.drawText(reportTitle, {
-        x: leftMargin,
-        y: height - 30,
-        font: ubuntuBoldFont,
-        size: 18
-      });
+      // const logoDims = logoImage.scale(0.3);
+      // page.drawImage(logoImage, { x:left, y:height-logoDims.height-10, width:logoDims.width, height:logoDims.height });
+      const reportTitle = `Event ${sectionTitle} Report`;
+      page.drawText(reportTitle, { x:left, y:height-30, font:ub, size:18 });
       y = height - 60;
 
-      //
-      // ——— EVENT DETAILS SECTION (customizable fields) ———
-      //
-      // You can add or remove any of these lines.
+      // EVENT DETAILS
+      // Customize this array to add/remove fields
       const eventFields = [
         `Event Code: ${currentRecord.EventCode || 'N/A'}`,
         `Name      : ${currentRecord.Name      || 'N/A'}`,
@@ -302,130 +452,110 @@
         `Discipline: ${currentRecord.Discipline|| 'N/A'}`,
         `Dates     : ${formatDate(currentRecord.DateStart)} – ${formatDate(currentRecord.DateEnd)}`,
         `City      : ${currentRecord.CITY       || 'N/A'}`,
-        `Region    : ${currentRecord.PERIF_CITY|| 'N/A'}`,
         `Venue     : ${currentRecord.VENUE      || 'N/A'}`,
         `Level     : ${currentRecord.LEVEL      || 'N/A'}`,
-        `Pool Size : ${currentRecord.POOL_SIZE  || 'N/A'}`,
-        `Organiser : ${currentRecord.Organiser  || 'N/A'}`
       ];
       eventFields.forEach(line => {
-        page.drawText(line, {
-          x: leftMargin,
-          y,
-          font: ubuntuFont,
-          size: 12
-        });
+        page.drawText(line, { x:left, y, font:uf, size:12 });
         y -= 16;
       });
-      y -= 10;  // spacing before expenses
+      y -= 10; // spacing
 
-      //
-      // ——— GROUPED BUDGET LINES (unchanged logic) ———
-      //
-      const details = allExpenseDetails.filter(d => {
-        const ref = d.Event;
-        return Array.isArray(ref) ? ref[1] === currentRecord.id : ref === currentRecord.id;
-      });
-      const categoryMap = new Map(allExpenseCategories.map(c=>[c.id,c]));
-      let grandTotal = 0;
-      const grouped = details.reduce((acc, d) => {
-        const cid = Array.isArray(d.ExpenseCategory) ? d.ExpenseCategory[1] : d.ExpenseCategory;
-        const cat = categoryMap.get(cid);
-        if (!cat) { return acc; }
-        const name  = cat.Name       || 'Uncategorized';
-        const order = cat.ExpCatCode || 999;
-        if (!acc[name]) {
-          acc[name] = { items: [], total: 0, order };
-        }
-        acc[name].items.push({ desc: d.Description || '', amt: d.Budget || 0 });
-        acc[name].total += d.Budget || 0;
-        return acc;
-      }, {});
+      // GROUPING
+      const cmap = new Map(categories.map(c=>[c.id,c]));
+      let sectionTotal = 0;
+      const grouped = details
+        .filter(d => {
+          const ref = d.Event;
+          return Array.isArray(ref) ? ref[1] === currentRecord.id : ref === currentRecord.id;
+        })
+        .reduce((acc, d) => {
+          const catId = isRevenue ? d.RevenueCategory : d.ExpenseCategory;
+          const cid   = Array.isArray(catId) ? catId[1] : catId;
+          const cat   = cmap.get(cid);
+          if (!cat) { return acc; }
+          const name  = cat.Name               || 'Uncategorized';
+          const order = cat.ExpCatCode||cat.DisplayOrder || 999;
+          if (!acc[name]) {
+            acc[name] = { items:[], total:0, order };
+          }
+          const amtField = isRevenue ? d.Amount : d.Budget;
+          const descField= d.Description || d.LineDescription || '';
+          acc[name].items.push({ desc:descField, amt:amtField||0 });
+          acc[name].total += amtField||0;
+          return acc;
+        }, {});
       Object.entries(grouped)
         .sort(([,a],[,b]) => a.order - b.order)
-        .forEach(([grp, data]) => {
-          if (y < 120) { page = pdfDoc.addPage(); y = height - 50; }
-          page.drawText(grp, { x: leftMargin, y, font: ubuntuBoldFont, size: 14 });
+        .forEach(([grp,data]) => {
+          if (y < 100) { page = pdfDoc.addPage(); y = height - 60; }
+          page.drawText(grp, { x:left, y, font:ub, size:14 });
           y -= 20;
           data.items.forEach(item => {
-            page.drawText(item.desc, { x: leftMargin + 20, y, font: ubuntuFont, size: 11 });
-            const amt = formatCurrency(item.amt);
-            page.drawText(amt, {
-              x: rightMargin - ubuntuFont.widthOfTextAtSize(amt, 11),
-              y, font: ubuntuFont, size: 11
+            page.drawText(item.desc, { x:left+20, y, font:uf, size:11 });
+            const amts = formatCurrency(item.amt);
+            page.drawText(amts, {
+              x:right - uf.widthOfTextAtSize(amts,11),
+              y, font:uf, size:11
             });
             y -= 16;
           });
-          const sub = formatCurrency(data.total);
+          const subtotal = formatCurrency(data.total);
           page.drawText('Group Total:', {
-            x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(sub, 12) - 80,
-            y, font: ubuntuBoldFont, size: 12
+            x: right - 80 - ub.widthOfTextAtSize(subtotal,12),
+            y, font:ub, size:12
           });
-          page.drawText(sub, {
-            x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(sub, 12),
-            y, font: ubuntuBoldFont, size: 12
+          page.drawText(subtotal, {
+            x: right - ub.widthOfTextAtSize(subtotal,12),
+            y, font:ub, size:12
           });
           y -= 24;
-          grandTotal += data.total;
+          sectionTotal += data.total;
         });
 
-      // Grand total
-      if (y < 80) { page = pdfDoc.addPage(); y = height - 50; }
-      const grandStr = `GRAND TOTAL: ${formatCurrency(grandTotal)}`;
-      page.drawText(grandStr, {
-        x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(grandStr, 14),
-        y, font: ubuntuBoldFont, size: 14
-      });
+      // SECTION TOTAL
+      if (y < 80) { page = pdfDoc.addPage(); y = height - 60; }
+      const sectionStr = `TOTAL ${sectionTitle.toUpperCase()}: ${formatCurrency(sectionTotal)}`;
+      page.drawText(sectionStr, { x: right - ub.widthOfTextAtSize(sectionStr,14), y, font:ub, size:14 });
+      y -= 30;
 
-      //
-      // ——— FOOTER SECTION ———
-      //
+      // FOOTER (timestamp, text, page number)
       const pages = pdfDoc.getPages();
-      const timestamp = new Date().toLocaleString('el-GR');      // generation date/time
-      const footerText = 'Generated by RapidShade Widget';       // customizable footer text
+      const timestamp = new Date().toLocaleString('el-GR');
+      const footerText = 'Generated by RapidShade Widget';
       pages.forEach((pg, idx) => {
-        pg.drawText(`Date: ${timestamp}`, {
-          x: leftMargin,
-          y: 20,
-          font: ubuntuFont,
-          size: 8
-        });
-        pg.drawText(footerText, {
-          x: leftMargin + 120,
-          y: 20,
-          font: ubuntuFont,
-          size: 8
-        });
-        const pageNum = `Page ${idx+1} of ${pages.length}`;
-        pg.drawText(pageNum, {
-          x: rightMargin - ubuntuFont.widthOfTextAtSize(pageNum, 8),
-          y: 20,
-          font: ubuntuFont,
-          size: 8
+        pg.drawText(`Date: ${timestamp}`, { x:left, y:20, font:uf, size:8 });
+        pg.drawText(footerText, { x:left+120, y:20, font:uf, size:8 });
+        const pgNum = `Page ${idx+1} / ${pages.length}`;
+        pg.drawText(pgNum, {
+          x: right - uf.widthOfTextAtSize(pgNum,8),
+          y:20,
+          font:uf,
+          size:8
         });
       });
 
-      // Save & download
+      // SAVE & DOWNLOAD
       const pdfBytes = await pdfDoc.save();
-      const blob     = new Blob([pdfBytes], { type: 'application/pdf' });
-      const url      = URL.createObjectURL(blob);
-      const a        = document.createElement('a');
-      a.href         = url;
-      a.download     = `${currentRecord.Name||'report'}.pdf`;
+      if (startNewDoc) delete window.pdfDocGlobal;
+      const blob = new Blob([pdfBytes], { type:'application/pdf' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `${currentRecord.Name||'report'}_${sectionTitle}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
 
     } catch (err) {
-      console.error("RapidShade: [WIDGET] Error generating PDF:", err);
-      recordInfoElement.textContent = 'Error creating PDF. Check console for details.';
+      console.error("RapidShade: PDF generation error:", err);
+      recordInfoElement.textContent = 'Error generating PDF. Check console.';
     } finally {
       downloadPdfButton.disabled = false;
       downloadPdfButton.textContent = 'Download PDF Report';
     }
   }
-  console.log("RapidShade: [WIDGET] v7.11 PDF generator with header/footer applied");
 
-  // Grist init & wiring (unchanged)
+  // GLUE: initialize Grist widget
   grist.ready({
     requiredAccess: 'full',
     columns: [
@@ -435,25 +565,8 @@
   });
   fetchData();
   grist.onRecord(onRecordUpdate);
-  downloadPdfButton.addEventListener('click', generatePdfReport);
+  downloadPdfButton.addEventListener('click', onDownloadClick);
 
-  function onRecordUpdate(record) {
-    currentRecord = record;
-    if (record && Object.keys(record).length) {
-      messageElement.style.display = 'none';
-      downloadPdfButton.style.display = 'inline-block';
-      downloadPdfButton.disabled = false;
-      recordInfoElement.textContent = `Selected: ${record.Name || 'Unnamed Event'}`;
-      renderHtmlReport();
-    } else {
-      messageElement.style.display = 'block';
-      messageElement.textContent = "Please select a record in the Events table.";
-      downloadPdfButton.style.display = 'none';
-      recordInfoElement.textContent = '';
-      reportContainer.innerHTML = '';
-    }
-  }
 </script>
-
 </body>
 </html>
