@@ -397,7 +397,10 @@
                 y -= 20; // Extra space after header
 
                 // --- Process and Draw Expenses ---
-                const eventExpenses = allExpenses.filter(e => Array.isArray(e.Event) && e.Event[1] === currentRecord.id);
+                //const eventExpenses = allExpenses.filter(e => Array.isArray(e.Event) && e.Event[1] === currentRecord.id);
+
+                // RapidShade - Remarked the above - that's not an array fkrs
+                const eventExpenses = allExpenses.filter(e => e.Event === currentRecord.id);
                 const categoryMap = new Map(allExpenseCategories.map(c => [c.id, c]));
                 let grandTotal = 0;
 
