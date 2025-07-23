@@ -244,7 +244,7 @@
             const eventExpenses = allExpenses.filter(e => Array.isArray(e.Event) && e.Event[1] === currentRecord.id);
             console.log(`Found ${eventExpenses.length} expenses for event ID ${currentRecord.id}`);
             // RapidShade
-            console.log("RapidShade: Event ID: " ${e.Event[1]});
+            console.log(`RapidShade: Event ID: ${e.Event[1]}`);
 
             const categoryMap = new Map(allExpenseCategories.map(c => [c.id, c]));
             let grandTotal = 0;
