@@ -102,11 +102,14 @@
         }
         .event-details-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 10px;
         }
         .detail-item {
             font-size: 0.95em;
+        }
+        .detail-item.full-width {
+            grid-column: 1 / -1;
         }
         .detail-item strong {
             color: #495057;
@@ -171,7 +174,7 @@
   </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v8.0 ▶️ Cleaned group titles & heading placeholder");
+  console.log("RapidShade: [WIDGET] v8.1 ▶️ All Event fields, with commented placeholders");
 
   if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
     document.getElementById('widget-container').innerHTML =
@@ -223,7 +226,7 @@
   }
 
   // —————————————————————————————————————————————
-  // Fetch all tables
+  // Fetch all tables (including additional Event fields if you map them)
   // —————————————————————————————————————————————
   async function fetchData() {
     try {
@@ -246,7 +249,7 @@
       console.error("Error fetching data:", e);
       reportContainer.innerHTML = `
         <div class="error-message">
-          Error fetching tables. Check Expenses, ExpenseDetails, ExpenseCategories,
+          Error fetching tables. Verify access to Expenses, ExpenseDetails, ExpenseCategories,
           Revenues, RevenueDetails, RevenueCategories.
         </div>`;
     }
@@ -281,7 +284,6 @@
     if (!currentRecord) { return; }
 
     // —— REPORT HEADING PLACEHOLDER —— 
-    // You can change this text if you want a custom heading
     const rpt = document.querySelector('input[name=reportType]:checked').value;
     const headingText = rpt==='expenses'  ? 'Expenses Report'
                       : rpt==='revenues'  ? 'Revenues Report'
@@ -295,15 +297,22 @@
     ev.className = 'event-details';
     ev.innerHTML = `
       <h3>Event Details</h3>
+      <div class="detail-item full-width"><strong>Name:</strong> ${currentRecord.Name||'N/A'}</div>
       <div class="event-details-grid">
         <div class="detail-item"><strong>Code:</strong> ${currentRecord.EventCode||'N/A'}</div>
-        <div class="detail-item"><strong>Name:</strong> ${currentRecord.Name||'N/A'}</div>
         <div class="detail-item"><strong>Sport:</strong> ${currentRecord.Sport||'N/A'}</div>
         <div class="detail-item"><strong>Discipline:</strong> ${currentRecord.Discipline||'N/A'}</div>
         <div class="detail-item"><strong>Dates:</strong> ${formatDate(currentRecord.DateStart)} – ${formatDate(currentRecord.DateEnd)}</div>
         <div class="detail-item"><strong>City:</strong> ${currentRecord.CITY||'N/A'}</div>
         <div class="detail-item"><strong>Venue:</strong> ${currentRecord.VENUE||'N/A'}</div>
         <div class="detail-item"><strong>Level:</strong> ${currentRecord.LEVEL||'N/A'}</div>
+        <!-- Uncomment any additional Events fields you need:
+        <div class="detail-item"><strong>PERIF_CITY:</strong> ${currentRecord.PERIF_CITY||'N/A'}</div>
+        <div class="detail-item"><strong>POOL_SIZE:</strong> ${currentRecord.POOL_SIZE||'N/A'}</div>
+        <div class="detail-item"><strong>Organiser:</strong> ${currentRecord.Organiser||'N/A'}</div>
+        <div class="detail-item"><strong>CustomField1:</strong> ${currentRecord.CustomField1||'N/A'}</div>
+        <div class="detail-item"><strong>CustomField2:</strong> ${currentRecord.CustomField2||'N/A'}</div>
+        -->
       </div>`;
     reportContainer.appendChild(ev);
 
@@ -358,7 +367,6 @@
     });
 
     hdrs.forEach(h => {
-      // GROUP TITLE = Category > Description (if present)
       const catObj = cats.find(c => c.id === h.Category);
       const catName = catObj ? catObj.Name : 'No Category';
       const desc = h.Description ? ` > ${h.Description}` : '';
@@ -368,7 +376,6 @@
       gDiv.className = groupClass;
       gDiv.innerHTML = `<h3>${title}</h3>`;
 
-      // Detail lines
       const lines = details.filter(d => {
         const ref = d[detailRef];
         const id  = Array.isArray(ref) ? ref[1] : ref;
@@ -384,7 +391,6 @@
         gDiv.appendChild(li);
       });
 
-      // Group total
       const sumDiv = document.createElement('div');
       sumDiv.className = 'group-summary';
       sumDiv.innerHTML = `<span>Group Total</span><span>${formatCurrency(sum)}</span>`;
@@ -394,7 +400,6 @@
       grand += sum;
     });
 
-    // Section grand total
     const gt = document.createElement('div');
     gt.className = 'grand-total';
     gt.innerHTML = `<span>GRAND TOTAL ${titleLabel.toUpperCase()}</span><span>${formatCurrency(grand)}</span>`;
@@ -418,7 +423,7 @@
   }
 
   // —————————————————————————————————————————————
-  // Core PDF creation v8.0
+  // Core PDF creation v8.1 (with all fields + placeholders)
   // —————————————————————————————————————————————
   async function pdfReport(isRevenue, isCombined) {
     downloadPdfButton.disabled   = true;
@@ -444,27 +449,39 @@
       const reportTitleText = isCombined ? 'Combined Report'
                              : isRevenue  ? 'Revenues Report'
                                           : 'Expenses Report';
-      // ← change this placeholder if you want a different heading
       page.drawText(reportTitleText, { x:left, y, font:ub, size:18 });
       y -= 25;
 
       // —— ALWAYS: Event Details —— 
       page.drawText('Event Details', { x:left, y, font:ub, size:16 });
       y -= 30;
-      const evF = [
+      // Name full width
+      page.drawText(`Name: ${currentRecord.Name||'N/A'}`, { x:left, y, font:uf, size:12 });
+      y -= 20;
+      // Other fields in 3-column layout
+      const fields = [
         `Code: ${currentRecord.EventCode||'N/A'}`,
-        `Name: ${currentRecord.Name||'N/A'}`,
         `Sport: ${currentRecord.Sport||'N/A'}`,
         `Discipline: ${currentRecord.Discipline||'N/A'}`,
         `Dates: ${formatDate(currentRecord.DateStart)} – ${formatDate(currentRecord.DateEnd)}`,
         `City: ${currentRecord.CITY||'N/A'}`,
         `Venue: ${currentRecord.VENUE||'N/A'}`,
         `Level: ${currentRecord.LEVEL||'N/A'}`
+        // Uncomment for more fields:
+        // `PERIF_CITY: ${currentRecord.PERIF_CITY||'N/A'}`,
+        // `POOL_SIZE: ${currentRecord.POOL_SIZE||'N/A'}`,
+        // `Organiser: ${currentRecord.Organiser||'N/A'}`,
+        // `CustomField1: ${currentRecord.CustomField1||'N/A'}`
       ];
-      evF.forEach(line => {
-        page.drawText(line, { x:left, y, font:uf, size:12 });
-        y -= 18;
+      const colWidth = (right - left) / 3;
+      fields.forEach((f, idx) => {
+        const col = idx % 3;
+        const row = Math.floor(idx / 3);
+        const x = left + col * colWidth;
+        const yPos = y - row * 18;
+        page.drawText(f, { x, y: yPos, font:uf, size:12 });
       });
+      y -= Math.ceil(fields.length / 3) * 18 + 10;
 
       // —— Section builder with safe page‐break at y<150 —— 
       const buildSection = (headers, details, cats, detailRef, label) => {
@@ -478,7 +495,6 @@
             page = pdfDoc.addPage();
             y = height - 60;
           }
-          // GROUP TITLE = Category > Description (if present)
           const catObj = cats.find(c => c.id === h.Category);
           const catName = catObj ? catObj.Name : 'No Category';
           const desc = h.Description ? ` > ${h.Description}` : '';
@@ -583,12 +599,13 @@
     }
   }
 
-  // Initialization
+  // Initialization: add any other Events columns you need below, uncommented
   grist.ready({
     requiredAccess: 'full',
     columns: [
       'EventCode','Name','Sport','Discipline','DateStart','DateEnd',
       'PERIF_CITY','CITY','VENUE','LEVEL','POOL_SIZE','Organiser'
+      // 'CustomField1','CustomField2','AnotherField', …
     ]
   });
   fetchData();
