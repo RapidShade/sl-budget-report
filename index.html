@@ -150,11 +150,12 @@
 
             try {
                 expensesData = await grist.docApi.fetchTable('Expenses');
-                expenseCategoriesData = await grist.docApi.fetchTable('ExpenseCategory');
+                // Corrected table name from 'ExpenseCategory' to 'ExpenseCategories'
+                expenseCategoriesData = await grist.docApi.fetchTable('ExpenseCategories');
                 renderReport();
             } catch (error) {
                 console.error("Error fetching data:", error);
-                reportContainer.innerHTML = `<div class="error-message">Error fetching expense data. Make sure 'Expenses' and 'ExpenseCategory' tables exist.</div>`;
+                reportContainer.innerHTML = `<div class="error-message">Error fetching expense data. Make sure 'Expenses' and 'ExpenseCategories' tables exist.</div>`;
             }
         }
 
@@ -169,18 +170,18 @@
             const categoryMap = new Map(expenseCategoriesData.map(c => [c.id, c]));
 
             const groupedExpenses = eventExpenses.reduce((acc, expense) => {
-                const category = categoryMap.get(expense.ExpenseCategory);
+                const category = categoryMap.get(expense.Category);
                 if (category) {
-                    const groupName = category.GroupName || 'Uncategorized';
+                    const groupName = category.Name || 'Uncategorized';
                     if (!acc[groupName]) {
                         acc[groupName] = {
                             items: [],
-                            displayOrder: category.DisplayOrder || 999
+                            displayOrder: category.manualSort || 999
                         };
                     }
                     acc[groupName].items.push({
-                        description: expense.LineDescription,
-                        amount: expense.Amount
+                        description: expense.Notes,
+                        amount: expense.Budget
                     });
                 }
                 return acc;
@@ -262,18 +263,17 @@
                 addDetail('Location', `${CITY}, ${VENUE}`);
                 y -= 20;
 
-
                 // Expenses
                 const eventExpenses = expensesData.filter(e => e.Event === currentRecord.id);
                 const categoryMap = new Map(expenseCategoriesData.map(c => [c.id, c]));
                 const groupedExpenses = eventExpenses.reduce((acc, expense) => {
-                    const category = categoryMap.get(expense.ExpenseCategory);
+                    const category = categoryMap.get(expense.Category);
                     if (category) {
-                        const groupName = category.GroupName || 'Uncategorized';
+                        const groupName = category.Name || 'Uncategorized';
                         if (!acc[groupName]) {
-                            acc[groupName] = { items: [], displayOrder: category.DisplayOrder || 999 };
+                            acc[groupName] = { items: [], displayOrder: category.manualSort || 999 };
                         }
-                        acc[groupName].items.push({ description: expense.LineDescription, amount: expense.Amount });
+                        acc[groupName].items.push({ description: expense.Notes, amount: expense.Budget });
                     }
                     return acc;
                 }, {});
@@ -301,7 +301,6 @@
                     }
                     y -= 10;
                 }
-
 
                 const pdfBytes = await pdfDoc.save();
                 const filename = `Budget_Report_${currentRecord.Name || 'Event'}.pdf`;
