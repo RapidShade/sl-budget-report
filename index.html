@@ -300,83 +300,118 @@
     reportContainer.appendChild(gtot);
   }
 
-  // PDF generator – identical grouping logic
-  async function generatePdfReport() {
-    if (!currentRecord) { alert("Please select a record first."); return; }
-    downloadPdfButton.disabled = true;
-    downloadPdfButton.textContent = 'Generating...';
+async function generatePdfReport() {
+  if (!currentRecord) {
+    alert("Please select a record first.");
+    return;
+  }
+  downloadPdfButton.disabled = true;
+  downloadPdfButton.textContent = 'Generating...';
 
-    try {
-      // load fonts, new PDF page, header, event details (unchanged)…
+  try {
+    // ——— PDF setup & fonts ———
+    const pdfDoc = await PDFDocument.create();
+    pdfDoc.registerFontkit(fontkit);
 
-      // Filter & group exactly as above
-      const details = allExpenseDetails.filter(d => {
-        const ref = d.Event;
-        return Array.isArray(ref) ? ref[1] === currentRecord.id : ref === currentRecord.id;
-      });
-      const categoryMap = new Map(allExpenseCategories.map(c => [c.id, c]));
-      let grandTotal = 0;
-      const grouped = details.reduce((acc, d) => {
-        const cid = Array.isArray(d.ExpenseCategory) ? d.ExpenseCategory[1] : d.ExpenseCategory;
-        const cat = categoryMap.get(cid);
-        if (!cat) { return acc; }
-        const grpName     = cat.Name || 'Uncategorized';
-        const displayOrder = cat.ExpCatCode || 999;
-        if (!acc[grpName]) {
-          acc[grpName] = { items: [], total: 0, displayOrder };
-        }
-        acc[grpName].items.push({
-          description: d.Description || '',
-          amount:      d.Actual || 0,
+    // Replace with your actual font URL/path
+    const fontBytes = await fetch('/fonts/Roboto-Bold.ttf').then(r => r.arrayBuffer());
+    const customBoldFont = await pdfDoc.embedFont(fontBytes);
+
+    // Create first page and margins
+    let page = pdfDoc.addPage();
+    const { width, height } = page.getSize();
+    const leftMargin  = 50;
+    const rightMargin = width - leftMargin;
+    let y = height - 50;
+
+    // ——— Draw your header & event details here ———
+    page.drawText(currentRecord.Name || 'Event', {
+      x: leftMargin, y, font: customBoldFont, size: 16
+    });
+    y -= 30;
+    // (…add dates, location, etc., exactly as you had before)
+
+    // ——— Now filter & group exactly as in your HTML preview ———
+    const details = allExpenseDetails.filter(d => {
+      const ref = d.Event;
+      return Array.isArray(ref) ? ref[1] === currentRecord.id : ref === currentRecord.id;
+    });
+    const categoryMap = new Map(allExpenseCategories.map(c => [c.id, c]));
+    let grandTotal = 0;
+    const grouped = details.reduce((acc, d) => {
+      const cid = Array.isArray(d.ExpenseCategory) ? d.ExpenseCategory[1] : d.ExpenseCategory;
+      const cat = categoryMap.get(cid);
+      if (!cat) { return acc; }
+      const name = cat.Name || 'Uncategorized';
+      const order = cat.ExpCatCode || 999;
+      if (!acc[name]) {
+        acc[name] = { items: [], total: 0, order };
+      }
+      acc[name].items.push({ desc: d.Description || '', amt: d.Actual || 0 });
+      acc[name].total += d.Actual || 0;
+      return acc;
+    }, {});
+
+    // ——— Draw each group, its lines, and subtotal ———
+    Object.entries(grouped)
+      .sort(([,a],[,b]) => a.order - b.order)
+      .forEach(([grp, data]) => {
+        if (y < 100) { page = pdfDoc.addPage(); y = height - 50; }
+        page.drawText(grp, { x: leftMargin, y, font: customBoldFont, size: 12 });
+        y -= 20;
+        data.items.forEach(item => {
+          page.drawText(item.desc, {
+            x: leftMargin + 20, y, font: customBoldFont, size: 10
+          });
+          const amtStr = formatCurrency(item.amt);
+          page.drawText(amtStr, {
+            x: rightMargin - customBoldFont.widthOfTextAtSize(amtStr, 10),
+            y, font: customBoldFont, size: 10
+          });
+          y -= 15;
         });
-        acc[grpName].total += d.Actual || 0;
-        return acc;
-      }, {});
-
-      const sorted = Object.entries(grouped)
-        .sort(([,a],[,b]) => a.displayOrder - b.displayOrder);
-
-      // now draw each group name, line-items, group total, and accumulate grandTotal…
-      for (const [grp, data] of sorted) {
-        // …layout logic with page.drawText(grp), then each line, then:
-        page.drawText('Group Total:', {
-          x: rightMargin - customBoldFont.widthOfTextAtSize(formatCurrency(data.total), 10) - 70,
-          y,
-          font: customBoldFont,
-          size: 10
+        // Group total
+        const totStr = formatCurrency(data.total);
+        page.drawText('Subtotal:', {
+          x: rightMargin - customBoldFont.widthOfTextAtSize(totStr, 10) - 70,
+          y, font: customBoldFont, size: 10
         });
-        page.drawText(formatCurrency(data.total), {
-          x: rightMargin - customBoldFont.widthOfTextAtSize(formatCurrency(data.total), 10),
-          y,
-          font: customBoldFont,
-          size: 10
+        page.drawText(totStr, {
+          x: rightMargin - customBoldFont.widthOfTextAtSize(totStr, 10),
+          y, font: customBoldFont, size: 10
         });
         y -= 25;
         grandTotal += data.total;
-      }
-
-      // Finally Grand Total at bottom:
-      if (y < 50) {
-        page = pdfDoc.addPage();
-        y = height - 50;
-      }
-      page.drawText(`GRAND TOTAL: ${formatCurrency(grandTotal)}`, {
-        x: rightMargin - customBoldFont.widthOfTextAtSize(`GRAND TOTAL: ${formatCurrency(grandTotal)}`, 14),
-        y,
-        font: customBoldFont,
-        size: 14
       });
 
-      // …save + download logic unchanged…
+    // ——— Finally, the Grand Total ———
+    if (y < 50) { page = pdfDoc.addPage(); y = height - 50; }
+    const grandStr = `GRAND TOTAL: ${formatCurrency(grandTotal)}`;
+    page.drawText(grandStr, {
+      x: rightMargin - customBoldFont.widthOfTextAtSize(grandStr, 14),
+      y, font: customBoldFont, size: 14
+    });
 
-    } catch (err) {
-      console.error("[WIDGET] Error generating PDF:", err);
-      recordInfoElement.textContent = 'Error creating PDF. Check console for details.';
-    } finally {
-      downloadPdfButton.disabled = false;
-      downloadPdfButton.textContent = 'Download PDF Report';
-    }
+    // ——— Save & trigger download ———
+    const pdfBytes = await pdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `${currentRecord.Name || 'report'}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+  } catch (err) {
+    console.error("RapidShade: [WIDGET] Error generating PDF:", err);
+    recordInfoElement.textContent = 'Error creating PDF. Check console for details.';
+  } finally {
+    downloadPdfButton.disabled = false;
+    downloadPdfButton.textContent = 'Download PDF Report';
   }
+}
+console.log("RapidShade: [WIDGET] v7.4 PDF fix applied");
+
 
   // Grist init
   grist.ready({
