@@ -171,7 +171,7 @@
   </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v8.0 ▶️ Final tweaks: clean titles & heading placeholder");
+  console.log("RapidShade: [WIDGET] v8.0 ▶️ Cleaned group titles & heading placeholder");
 
   if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
     document.getElementById('widget-container').innerHTML =
@@ -280,17 +280,17 @@
     reportContainer.innerHTML = '';
     if (!currentRecord) { return; }
 
-    // REPORT HEADING PLACEHOLDER
-    // — change text here if you want a custom heading
+    // —— REPORT HEADING PLACEHOLDER —— 
+    // You can change this text if you want a custom heading
     const rpt = document.querySelector('input[name=reportType]:checked').value;
-    const headingText = rpt==='expenses' ? 'Expenses Report' 
-                      : rpt==='revenues' ? 'Revenues Report' 
-                      : 'Combined Report';
+    const headingText = rpt==='expenses'  ? 'Expenses Report'
+                      : rpt==='revenues'  ? 'Revenues Report'
+                                         : 'Combined Report';
     const heading = document.createElement('h3');
     heading.textContent = headingText;
     reportContainer.appendChild(heading);
 
-    // ALWAYS: Event details
+    // —— Event details —— 
     const ev = document.createElement('div');
     ev.className = 'event-details';
     ev.innerHTML = `
@@ -307,7 +307,7 @@
       </div>`;
     reportContainer.appendChild(ev);
 
-    // EXPENSES
+    // —— Sections —— 
     if ((rpt==='expenses' || rpt==='combined') && allExpenses.length) {
       renderGroups(
         'Expenses',
@@ -319,7 +319,6 @@
         'expense-item'
       );
     }
-    // REVENUES
     if ((rpt==='revenues' || rpt==='combined') && allRevenues.length) {
       renderGroups(
         'Revenues',
@@ -331,7 +330,8 @@
         'revenue-item'
       );
     }
-    // NOTHING TO SHOW?
+
+    // —— No records placeholder —— 
     if (
       (rpt==='expenses' && !allExpenses.length) ||
       (rpt==='revenues' && !allRevenues.length) ||
@@ -344,7 +344,7 @@
   }
 
   // —————————————————————————————————————————————
-  // Render one section in HTML
+  // Render a section in HTML
   // —————————————————————————————————————————————
   function renderGroups(titleLabel, headers, details, cats, detailRef, groupClass, itemClass) {
     let grand = 0;
@@ -358,19 +358,20 @@
     });
 
     hdrs.forEach(h => {
-      // GROUP TITLE = Category > Description
+      // GROUP TITLE = Category > Description (if present)
       const catObj = cats.find(c => c.id === h.Category);
-      const title  = (catObj ? catObj.Name : 'No Category')
-                        + ' > '
-                        + (h.Description||h.Name||'(no desc)');
+      const catName = catObj ? catObj.Name : 'No Category';
+      const desc = h.Description ? ` > ${h.Description}` : '';
+      const title = catName + desc;
 
       const gDiv = document.createElement('div');
       gDiv.className = groupClass;
       gDiv.innerHTML = `<h3>${title}</h3>`;
 
+      // Detail lines
       const lines = details.filter(d => {
         const ref = d[detailRef];
-        const id  = Array.isArray(ref)?ref[1]:ref;
+        const id  = Array.isArray(ref) ? ref[1] : ref;
         return id===h.id;
       });
       let sum = 0;
@@ -383,6 +384,7 @@
         gDiv.appendChild(li);
       });
 
+      // Group total
       const sumDiv = document.createElement('div');
       sumDiv.className = 'group-summary';
       sumDiv.innerHTML = `<span>Group Total</span><span>${formatCurrency(sum)}</span>`;
@@ -392,17 +394,18 @@
       grand += sum;
     });
 
+    // Section grand total
     const gt = document.createElement('div');
     gt.className = 'grand-total';
     gt.innerHTML = `<span>GRAND TOTAL ${titleLabel.toUpperCase()}</span><span>${formatCurrency(grand)}</span>`;
     reportContainer.appendChild(gt);
   }
 
-  // live UI update
+  // Live UI update
   document.querySelectorAll('input[name=reportType]')
     .forEach(r => r.addEventListener('change', renderHtmlReport));
 
-  // download dispatch
+  // Download dispatch
   async function onDownloadClick() {
     const rpt = document.querySelector('input[name=reportType]:checked').value;
     if (rpt==='expenses') {
@@ -420,6 +423,7 @@
   async function pdfReport(isRevenue, isCombined) {
     downloadPdfButton.disabled   = true;
     downloadPdfButton.textContent = 'Generating...';
+
     try {
       const pdfDoc = await PDFDocument.create();
       pdfDoc.registerFontkit(fontkit);
@@ -432,7 +436,7 @@
       const uf = await pdfDoc.embedFont(rBytes);
       const ub = await pdfDoc.embedFont(bBytes);
 
-      // —— Placeholder REPORT TITLE —— 
+      // —— REPORT TITLE PLACEHOLDER —— 
       let page = pdfDoc.addPage();
       const { width, height } = page.getSize();
       const left = 50, right = width - 50;
@@ -474,11 +478,11 @@
             page = pdfDoc.addPage();
             y = height - 60;
           }
-          // GROUP TITLE = Category > Description
+          // GROUP TITLE = Category > Description (if present)
           const catObj = cats.find(c => c.id === h.Category);
-          const title  = (catObj?catObj.Name:'No Category')
-                        + ' > '
-                        + (h.Description||h.Name||'(no desc)');
+          const catName = catObj ? catObj.Name : 'No Category';
+          const desc = h.Description ? ` > ${h.Description}` : '';
+          const title = catName + desc;
           page.drawText(title, { x:left, y, font:ub, size:14 });
           y -= 20;
 
@@ -486,7 +490,7 @@
           const lines = details.filter(d => {
             const ref = d[detailRef];
             const id  = Array.isArray(ref)?ref[1]:ref;
-            return id === h.id;
+            return id===h.id;
           });
           for (let d of lines) {
             if (y < 150) {
@@ -518,6 +522,7 @@
           });
           y -= 24;
         }
+
         if (y < 150) {
           page = pdfDoc.addPage();
           y = height - 60;
