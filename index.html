@@ -156,7 +156,7 @@
     </div>
 
     <script>
-        console.log("[WIDGET] v7.1 Starting");
+        console.log("[WIDGET] v7.2 Starting");
 
         // Ensure PDF libraries are loaded
         if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
@@ -207,8 +207,9 @@
                 
                 allExpenses = tableToRecords(rawExpenses);
                 allExpenseCategories = tableToRecords(rawCategories);
-                console.log("Fetched Expenses:", allExpenses);
-                console.log("Fetched Expense Categories:", allExpenseCategories);
+                console.log("Fetched Expenses:", allExpenses.length, "records. Sample:", allExpenses.length > 0 ? allExpenses[0] : "N/A");
+                console.log("Fetched Expense Categories:", allExpenseCategories.length, "records. Sample:", allExpenseCategories.length > 0 ? allExpenseCategories[0] : "N/A");
+
             } catch (error) {
                 console.error("Error fetching data:", error);
                 reportContainer.innerHTML = `<div class="error-message">Error fetching data. Check table names ('Expenses', 'ExpenseCategories') and ensure the widget has 'full' access.</div>`;
@@ -218,7 +219,8 @@
         // Renders the report in HTML for on-screen preview
         function renderHtmlReport() {
             reportContainer.innerHTML = ''; // Clear previous report
-            if (!currentRecord || !allExpenses.length || !allExpenseCategories.length) {
+            if (!currentRecord || !allExpenses.length) {
+                console.log("Cannot render report. Missing currentRecord or expense data.");
                 return;
             }
 
@@ -229,24 +231,30 @@
                 <h3>Event Details</h3>
                 <div class="event-details-grid">
                     <div class="detail-item"><strong>Event:</strong> ${currentRecord.Name || 'N/A'}</div>
-                    <div class="detail-item"><strong>Sport:</strong> ${currentRecord.Sport_text || 'N/A'}</div>
+                    <div class="detail-item"><strong>Sport:</strong> ${currentRecord.Sport || 'N/A'}</div>
                     <div class="detail-item"><strong>Dates:</strong> ${formatDate(currentRecord.DateStart)} to ${formatDate(currentRecord.DateEnd)}</div>
                     <div class="detail-item"><strong>Location:</strong> ${currentRecord.CITY || 'N/A'}, ${currentRecord.VENUE || 'N/A'}</div>
                     <div class="detail-item"><strong>Level:</strong> ${currentRecord.LEVEL || 'N/A'}</div>
                 </div>
             `;
             reportContainer.appendChild(eventDetailsDiv);
+            
+            // --- DATA PROCESSING ---
+            // Filter expenses for the selected event, handling Grist's reference column format `['R', id]`
+            const eventExpenses = allExpenses.filter(e => Array.isArray(e.Event) && e.Event[1] === currentRecord.id);
+            console.log(`Found ${eventExpenses.length} expenses for event ID ${currentRecord.id}`);
 
-            // Filter expenses for the selected event
-            const eventExpenses = allExpenses.filter(e => e.Event === currentRecord.id);
             const categoryMap = new Map(allExpenseCategories.map(c => [c.id, c]));
             let grandTotal = 0;
 
             // Group expenses by category
             const groupedExpenses = eventExpenses.reduce((acc, detail) => {
-                const category = categoryMap.get(detail.ExpenseCategory);
+                // Handle Grist's reference column format for ExpenseCategory
+                const categoryRef = detail.ExpenseCategory;
+                const categoryId = Array.isArray(categoryRef) ? categoryRef[1] : categoryRef;
+                const category = categoryMap.get(categoryId);
+
                 if (category) {
-                    // Use GroupName for grouping, fallback to Name
                     const groupName = category.GroupName || category.Name || 'Uncategorized';
                     if (!acc[groupName]) {
                         acc[groupName] = {
@@ -343,7 +351,6 @@
 
             try {
                 // --- FONT LOADING ---
-                // Fetch the font files for UTF-8 support (including Greek characters)
                 const fontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-R.ttf';
                 const boldFontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-B.ttf';
 
@@ -352,13 +359,8 @@
                     fetch(boldFontUrl).then(res => res.arrayBuffer())
                 ]);
                 
-                // Create a new PDF document
                 const pdfDoc = await PDFDocument.create();
-                
-                // Register fontkit to handle the custom font
                 pdfDoc.registerFontkit(fontkit);
-
-                // Embed the custom fonts
                 const customFont = await pdfDoc.embedFont(fontBytes);
                 const customBoldFont = await pdfDoc.embedFont(boldFontBytes);
 
@@ -376,7 +378,7 @@
                 // --- Event Details Section ---
                 const eventDetails = [
                     { label: 'Event', value: currentRecord.Name || 'N/A' },
-                    { label: 'Sport', value: currentRecord.Sport_text || 'N/A' },
+                    { label: 'Sport', value: currentRecord.Sport || 'N/A' },
                     { label: 'Dates', value: `${formatDate(currentRecord.DateStart)} to ${formatDate(currentRecord.DateEnd)}` },
                     { label: 'Location', value: `${currentRecord.CITY || 'N/A'}, ${currentRecord.VENUE || 'N/A'}` },
                     { label: 'Level', value: currentRecord.LEVEL || 'N/A' },
@@ -390,12 +392,14 @@
                 y -= 20; // Extra space after header
 
                 // --- Process and Draw Expenses ---
-                const eventExpenses = allExpenses.filter(e => e.Event === currentRecord.id);
+                const eventExpenses = allExpenses.filter(e => Array.isArray(e.Event) && e.Event[1] === currentRecord.id);
                 const categoryMap = new Map(allExpenseCategories.map(c => [c.id, c]));
                 let grandTotal = 0;
 
                 const groupedExpenses = eventExpenses.reduce((acc, detail) => {
-                    const category = categoryMap.get(detail.ExpenseCategory);
+                    const categoryRef = detail.ExpenseCategory;
+                    const categoryId = Array.isArray(categoryRef) ? categoryRef[1] : categoryRef;
+                    const category = categoryMap.get(categoryId);
                     if (category) {
                         const groupName = category.GroupName || category.Name || 'Uncategorized';
                         if (!acc[groupName]) {
@@ -410,17 +414,14 @@
                 const sortedGroups = Object.entries(groupedExpenses).sort(([, a], [, b]) => a.displayOrder - b.displayOrder);
 
                 for (const [groupName, groupData] of sortedGroups) {
-                    // Add new page if not enough space
                     if (y < 80) { 
                         page = pdfDoc.addPage();
                         y = height - 50;
                     }
 
-                    // Group Header
                     page.drawText(groupName, { x, y, font: customBoldFont, size: 12, color: rgb(0.1, 0.1, 0.1) });
                     y -= 20;
 
-                    // Group Items
                     for (const item of groupData.items) {
                         if (y < 40) {
                              page = pdfDoc.addPage();
@@ -433,17 +434,15 @@
                         y -= 15;
                     }
 
-                    // Group Summary
                     const summaryText = formatCurrency(groupData.total);
                     const summaryWidth = customBoldFont.widthOfTextAtSize(summaryText, 10);
                     page.drawText('Group Total:', { x: rightMargin - summaryWidth - 70, y, font: customBoldFont, size: 10 });
                     page.drawText(summaryText, { x: rightMargin - summaryWidth, y, font: customBoldFont, size: 10 });
-                    y -= 25; // Extra space after group
+                    y -= 25; 
                     
                     grandTotal += groupData.total;
                 }
                 
-                // --- Grand Total ---
                 if (y < 50) {
                     page = pdfDoc.addPage();
                     y = height - 50;
@@ -476,14 +475,9 @@
         // --- Initialization ---
         grist.ready({
             requiredAccess: 'full',
-            // Define the columns from the 'Events' table that the widget needs.
-            // This makes the data available in the 'record' object.
             columns: [
                 'EventCode', 'Name', 'Sport', 'Discipline', 'DateStart', 'DateEnd',
-                'PERIF_CITY', 'CITY', 'VENUE', 'LEVEL', 'POOL_SIZE', 'Organiser',
-                // Add reference column text representations if available, e.g., Sport_text
-                {name: 'Sport', optional: true},
-                {name: 'Sport_text', optional: true} // Example if you have a formula column
+                'PERIF_CITY', 'CITY', 'VENUE', 'LEVEL', 'POOL_SIZE', 'Organiser'
             ]
         });
 
