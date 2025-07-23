@@ -156,7 +156,7 @@
     </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v7.7 Starting");
+  console.log("RapidShade: [WIDGET] v7.8 Starting");
 
   // Ensure PDF-lib and fontkit are loaded
   if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
@@ -296,7 +296,7 @@
     reportContainer.appendChild(gtot);
   }
 
-  // PDF generator – now embedding Ubuntu font for Greek support
+  // PDF generator – now embedding Ubuntu font via relative path
   async function generatePdfReport() {
     if (!currentRecord) {
       alert("Please select a record first.");
@@ -310,8 +310,8 @@
       const pdfDoc = await PDFDocument.create();
       pdfDoc.registerFontkit(fontkit);
 
-      // Embed the Ubuntu font (supports Greek)
-      const fontBytes = await fetch('/fonts/Ubuntu-Regular.ttf').then(r => r.arrayBuffer());
+      // Embed the Ubuntu font (supports Greek) from a relative path
+      const fontBytes = await fetch('fonts/Ubuntu-Regular.ttf').then(r => r.arrayBuffer());
       const ubuntuFont = await pdfDoc.embedFont(fontBytes);
 
       // Create first page and margins
@@ -326,18 +326,18 @@
         x: leftMargin, y, font: ubuntuFont, size: 16
       });
       y -= 30;
-      // You can add dates, location, etc., similarly using ubuntuFont
+      // (add dates, location, etc., with ubuntuFont as needed)
 
       // Filter & group exactly as in HTML preview
-      const details = allExpenseDetails.filter(d => {
+      const detailsPdf = allExpenseDetails.filter(d => {
         const ref = d.Event;
         return Array.isArray(ref) ? ref[1] === currentRecord.id : ref === currentRecord.id;
       });
-      const categoryMap = new Map(allExpenseCategories.map(c => [c.id, c]));
-      let grandTotal = 0;
-      const groupedPdf = details.reduce((acc, d) => {
+      const categoryMapPdf = new Map(allExpenseCategories.map(c => [c.id, c]));
+      let grandTotalPdf = 0;
+      const groupedPdf = detailsPdf.reduce((acc, d) => {
         const cid = Array.isArray(d.ExpenseCategory) ? d.ExpenseCategory[1] : d.ExpenseCategory;
-        const cat = categoryMap.get(cid);
+        const cat = categoryMapPdf.get(cid);
         if (!cat) { return acc; }
         const name  = cat.Name || 'Uncategorized';
         const order = cat.ExpCatCode || 999;
@@ -376,12 +376,12 @@
             y, font: ubuntuFont, size: 10
           });
           y -= 25;
-          grandTotal += data.total;
+          grandTotalPdf += data.total;
         });
 
       // Grand total at bottom
       if (y < 50) { page = pdfDoc.addPage(); y = height - 50; }
-      const grandStr = `GRAND TOTAL: ${formatCurrency(grandTotal)}`;
+      const grandStr = `GRAND TOTAL: ${formatCurrency(grandTotalPdf)}`;
       page.drawText(grandStr, {
         x: rightMargin - ubuntuFont.widthOfTextAtSize(grandStr, 14),
         y, font: ubuntuFont, size: 14
@@ -405,7 +405,7 @@
       downloadPdfButton.textContent = 'Download PDF Report';
     }
   }
-  console.log("RapidShade: [WIDGET] v7.7 PDF fix applied");
+  console.log("RapidShade: [WIDGET] v7.8 PDF fix applied");
 
   // Grist init
   grist.ready({
@@ -416,6 +416,7 @@
     ]
   });
 
+  // Initial data fetch and event wiring
   fetchData();
   grist.onRecord(onRecordUpdate);
   downloadPdfButton.addEventListener('click', generatePdfReport);
