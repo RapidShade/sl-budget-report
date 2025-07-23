@@ -156,7 +156,7 @@
     </div>
 
     <script>
-        console.log("[WIDGET] v7.2 Starting");
+        console.log("RapidShade: [WIDGET] v7.2 Starting");
 
         // Ensure PDF libraries are loaded
         if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
@@ -207,8 +207,8 @@
                 
                 allExpenses = tableToRecords(rawExpenses);
                 allExpenseCategories = tableToRecords(rawCategories);
-                console.log("Fetched Expenses:", allExpenses.length, "records. Sample:", allExpenses.length > 0 ? allExpenses[0] : "N/A");
-                console.log("Fetched Expense Categories:", allExpenseCategories.length, "records. Sample:", allExpenseCategories.length > 0 ? allExpenseCategories[0] : "N/A");
+                console.log("RapidShade: Fetched Expenses:", allExpenses.length, "records. Sample:", allExpenses.length > 0 ? allExpenses[0] : "N/A");
+                console.log("RapidShade: Fetched Expense Categories:", allExpenseCategories.length, "records. Sample:", allExpenseCategories.length > 0 ? allExpenseCategories[0] : "N/A");
 
             } catch (error) {
                 console.error("Error fetching data:", error);
@@ -220,7 +220,7 @@
         function renderHtmlReport() {
             reportContainer.innerHTML = ''; // Clear previous report
             if (!currentRecord || !allExpenses.length) {
-                console.log("Cannot render report. Missing currentRecord or expense data.");
+                console.log("RapidShade: Cannot render report. Missing currentRecord or expense data.");
                 return;
             }
 
@@ -244,7 +244,7 @@
             //const eventExpenses = allExpenses.filter(e => Array.isArray(e.Event) && e.Event[1] === currentRecord.id);
 
             //RapidShade - Changed filter 
-            const eventExpenses = allExpenses.filter(e => Array.isArray(e.Event) && e.Event[0] === currentRecord.id);
+            const eventExpenses = allExpenses.filter(e => e.Event === currentRecord.id);
             console.log(`Found ${eventExpenses.length} expenses for event ID ${currentRecord.id}`);
             // RapidShade
             //console.log(`RapidShade: Event ID: ${e.Event[1]}`);
@@ -317,14 +317,14 @@
         async function onRecordUpdate(record, mappings) {
             currentRecord = record;
             if (record && Object.keys(record).length > 0) {
-                console.log("[WIDGET] Record selected:", record);
+                console.log("RapidShade: [WIDGET] Record selected:", record);
                 messageElement.style.display = 'none';
                 downloadPdfButton.style.display = 'inline-block';
                 downloadPdfButton.disabled = false;
                 recordInfoElement.textContent = `Selected: ${record.Name || record.EventCode || 'Unnamed Event'}`;
                 renderHtmlReport(); // Render the HTML preview
             } else {
-                console.log("[WIDGET] No record selected.");
+                console.log("RapidShade: [WIDGET] No record selected.");
                 currentRecord = null;
                 messageElement.style.display = 'block';
                 messageElement.textContent = "Please select a record in the Events table.";
