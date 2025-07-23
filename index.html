@@ -241,10 +241,13 @@
             
             // --- DATA PROCESSING ---
             // Filter expenses for the selected event, handling Grist's reference column format `['R', id]`
-            const eventExpenses = allExpenses.filter(e => Array.isArray(e.Event) && e.Event[1] === currentRecord.id);
+            //const eventExpenses = allExpenses.filter(e => Array.isArray(e.Event) && e.Event[1] === currentRecord.id);
+
+            //RapidShade - Changed filter 
+            const eventExpenses = allExpenses.filter(e => Array.isArray(e.Event) && e.Event[0] === currentRecord.id);
             console.log(`Found ${eventExpenses.length} expenses for event ID ${currentRecord.id}`);
             // RapidShade
-            console.log(`RapidShade: Event ID: ${e.Event[1]}`);
+            //console.log(`RapidShade: Event ID: ${e.Event[1]}`);
 
             const categoryMap = new Map(allExpenseCategories.map(c => [c.id, c]));
             let grandTotal = 0;
