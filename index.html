@@ -174,7 +174,7 @@
   </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v8.1 ▶️ All Event fields, with commented placeholders");
+  console.log("RapidShade: [WIDGET] v8.2 ▶️ Page breaks & detail lines option");
 
   if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
     document.getElementById('widget-container').innerHTML =
@@ -182,26 +182,25 @@
     throw new Error("PDF-lib or fontkit not found.");
   }
 
-  const { PDFDocument } = PDFLib;
+  const { PDFDocument, rgb } = PDFLib;  // import rgb for line color
   const messageElement    = document.getElementById('message');
   const downloadPdfButton = document.getElementById('downloadPdfButton');
   const recordInfoElement = document.getElementById('record-info');
   const reportContainer   = document.getElementById('report-container');
 
   let currentRecord     = null;
-  let allExpenses       = [];
-  let allExpenseDetails = [];
-  let allExpenseCats    = [];
-  let allRevenues       = [];
-  let allRevenueDetails = [];
-  let allRevenueCats    = [];
+  let allExpenses       = [], allExpenseDetails = [], allExpenseCats = [];
+  let allRevenues       = [], allRevenueDetails = [], allRevenueCats = [];
 
-  // —————————————————————————————————————————————
-  // Helpers
-  // —————————————————————————————————————————————
+  // ————— CONFIG —————————————————————————————————————————————
+  // Toggle thin lines under each PDF detail row
+  const enablePdfDetailLines = true;    // set false to disable
+  const pdfDetailLineWidth   = 0.5;     // thickness in points
+  const pdfDetailLineColor   = rgb(0.75, 0.75, 0.75);  // light gray
+  // —————————————————————————————————————————————————
+
   const formatCurrency = amt =>
     (amt || 0).toLocaleString('el-GR', { style: 'currency', currency: 'EUR' });
-
   function formatDate(secOrDate) {
     if (!secOrDate) return 'N/A';
     const d = secOrDate instanceof Date
@@ -209,25 +208,21 @@
       : new Date(secOrDate * 1000);
     return isNaN(d) ? 'Invalid Date' : d.toLocaleDateString('el-GR');
   }
-
   function tableToRecords(data) {
     if (!data || typeof data!=='object' || Array.isArray(data)) {
       return Array.isArray(data)?data:[];
     }
     const cols = Object.keys(data);
-    if (!cols.length||!Array.isArray(data[cols[0]])) return [];
-    const n = data[cols[0]].length, recs=[];
-    for (let i=0;i<n;i++){
-      const rec={};
-      for(let c of cols) rec[c]=data[c][i];
+    if (!cols.length || !Array.isArray(data[cols[0]])) return [];
+    const n = data[cols[0]].length, recs = [];
+    for (let i = 0; i < n; i++) {
+      const rec = {};
+      for (let c of cols) rec[c] = data[c][i];
       recs.push(rec);
     }
     return recs;
   }
 
-  // —————————————————————————————————————————————
-  // Fetch all tables (including additional Event fields if you map them)
-  // —————————————————————————————————————————————
   async function fetchData() {
     try {
       const [er, ed, ec, rr, rd, rc] = await Promise.all([
@@ -249,22 +244,18 @@
       console.error("Error fetching data:", e);
       reportContainer.innerHTML = `
         <div class="error-message">
-          Error fetching tables. Verify access to Expenses, ExpenseDetails, ExpenseCategories,
-          Revenues, RevenueDetails, RevenueCategories.
+          Error fetching tables.
         </div>`;
     }
   }
 
-  // —————————————————————————————————————————————
-  // Handle record selection
-  // —————————————————————————————————————————————
   function onRecordUpdate(record) {
     currentRecord = record;
     if (record && Object.keys(record).length) {
       messageElement.style.display    = 'none';
       downloadPdfButton.disabled      = false;
       downloadPdfButton.style.display = 'inline-block';
-      recordInfoElement.textContent   = `Selected: ${record.Name || 'Unnamed Event'}`;
+      recordInfoElement.textContent   = `Selected: ${record.Name}`;
       renderHtmlReport();
     } else {
       messageElement.style.display    = 'block';
@@ -276,29 +267,26 @@
     }
   }
 
-  // —————————————————————————————————————————————
-  // Render on-screen preview
-  // —————————————————————————————————————————————
   function renderHtmlReport() {
     reportContainer.innerHTML = '';
     if (!currentRecord) { return; }
 
-    // —— REPORT HEADING PLACEHOLDER —— 
+    // REPORT HEADING
     const rpt = document.querySelector('input[name=reportType]:checked').value;
-    const headingText = rpt==='expenses'  ? 'Expenses Report'
-                      : rpt==='revenues'  ? 'Revenues Report'
-                                         : 'Combined Report';
+    const headingText = rpt==='expenses'? 'Expenses Report'
+                        : rpt==='revenues'? 'Revenues Report'
+                                          : 'Combined Report';
     const heading = document.createElement('h3');
     heading.textContent = headingText;
     reportContainer.appendChild(heading);
 
-    // —— Event details —— 
+    // EVENT DETAILS (full-width Name + 3-column grid)
     const ev = document.createElement('div');
     ev.className = 'event-details';
     ev.innerHTML = `
       <h3>Event Details</h3>
-      <div class="detail-item full-width"><strong>Name:</strong> ${currentRecord.Name||'N/A'}</div>
       <div class="event-details-grid">
+        <div class="detail-item full-width"><strong>Name:</strong> ${currentRecord.Name||'N/A'}</div>
         <div class="detail-item"><strong>Code:</strong> ${currentRecord.EventCode||'N/A'}</div>
         <div class="detail-item"><strong>Sport:</strong> ${currentRecord.Sport||'N/A'}</div>
         <div class="detail-item"><strong>Discipline:</strong> ${currentRecord.Discipline||'N/A'}</div>
@@ -306,160 +294,113 @@
         <div class="detail-item"><strong>City:</strong> ${currentRecord.CITY||'N/A'}</div>
         <div class="detail-item"><strong>Venue:</strong> ${currentRecord.VENUE||'N/A'}</div>
         <div class="detail-item"><strong>Level:</strong> ${currentRecord.LEVEL||'N/A'}</div>
-        <!-- Uncomment any additional Events fields you need:
+        <!-- Uncomment additional fields as needed:
         <div class="detail-item"><strong>PERIF_CITY:</strong> ${currentRecord.PERIF_CITY||'N/A'}</div>
         <div class="detail-item"><strong>POOL_SIZE:</strong> ${currentRecord.POOL_SIZE||'N/A'}</div>
         <div class="detail-item"><strong>Organiser:</strong> ${currentRecord.Organiser||'N/A'}</div>
-        <div class="detail-item"><strong>CustomField1:</strong> ${currentRecord.CustomField1||'N/A'}</div>
-        <div class="detail-item"><strong>CustomField2:</strong> ${currentRecord.CustomField2||'N/A'}</div>
         -->
       </div>`;
     reportContainer.appendChild(ev);
 
-    // —— Sections —— 
-    if ((rpt==='expenses' || rpt==='combined') && allExpenses.length) {
-      renderGroups(
-        'Expenses',
-        allExpenses,
-        allExpenseDetails,
-        allExpenseCats,
-        'Expense',
-        'expense-group',
-        'expense-item'
-      );
+    // SECTIONS
+    if ((rpt==='expenses'||rpt==='combined') && allExpenses.length) {
+      renderGroups('Expenses', allExpenses, allExpenseDetails, allExpenseCats, 'Expense', 'expense-group','expense-item');
     }
-    if ((rpt==='revenues' || rpt==='combined') && allRevenues.length) {
-      renderGroups(
-        'Revenues',
-        allRevenues,
-        allRevenueDetails,
-        allRevenueCats,
-        'Revenue',
-        'revenue-group',
-        'revenue-item'
-      );
+    if ((rpt==='revenues'||rpt==='combined') && allRevenues.length) {
+      renderGroups('Revenues', allRevenues, allRevenueDetails, allRevenueCats, 'Revenue','revenue-group','revenue-item');
     }
 
-    // —— No records placeholder —— 
-    if (
-      (rpt==='expenses' && !allExpenses.length) ||
-      (rpt==='revenues' && !allRevenues.length) ||
-      (rpt==='combined' && !allExpenses.length && !allRevenues.length)
-    ) {
+    // NO RECORDS
+    if ((rpt==='expenses'&&!allExpenses.length)
+     ||(rpt==='revenues'&&!allRevenues.length)
+     ||(rpt==='combined'&&!allExpenses.length&&!allRevenues.length)) {
       const p = document.createElement('p');
-      p.textContent = 'No records to display for this report.';
+      p.textContent = 'No records to display.';
       reportContainer.appendChild(p);
     }
   }
 
-  // —————————————————————————————————————————————
-  // Render a section in HTML
-  // —————————————————————————————————————————————
-  function renderGroups(titleLabel, headers, details, cats, detailRef, groupClass, itemClass) {
+  function renderGroups(title, headers, details, cats, detailRef, gClass, iClass) {
     let grand = 0;
-    const sect = document.createElement('h3');
-    sect.textContent = titleLabel;
-    reportContainer.appendChild(sect);
+    reportContainer.appendChild(Object.assign(document.createElement('h3'),{textContent:title}));
 
-    const hdrs = headers.filter(h => {
-      const ref = h.Event;
-      return Array.isArray(ref) ? ref[1]===currentRecord.id : ref===currentRecord.id;
+    const hdrs = headers.filter(h=>{
+      const r=h.Event; return Array.isArray(r)?r[1]===currentRecord.id:r===currentRecord.id;
     });
-
-    hdrs.forEach(h => {
-      const catObj = cats.find(c => c.id === h.Category);
-      const catName = catObj ? catObj.Name : 'No Category';
-      const desc = h.Description ? ` > ${h.Description}` : '';
-      const title = catName + desc;
-
+    hdrs.forEach(h=>{
+      const catObj = cats.find(c=>c.id===h.Category);
+      const catName=catObj?catObj.Name:'No Category';
+      const desc   = h.Description?` > ${h.Description}`:'';
+      const titleLine = catName+desc;
       const gDiv = document.createElement('div');
-      gDiv.className = groupClass;
-      gDiv.innerHTML = `<h3>${title}</h3>`;
-
-      const lines = details.filter(d => {
-        const ref = d[detailRef];
-        const id  = Array.isArray(ref) ? ref[1] : ref;
+      gDiv.className = gClass;
+      gDiv.innerHTML = `<h3>${titleLine}</h3>`;
+      let sum=0;
+      details.filter(d=>{
+        const r=d[detailRef]; const id=Array.isArray(r)?r[1]:r;
         return id===h.id;
-      });
-      let sum = 0;
-      lines.forEach(d => {
-        const li = document.createElement('div');
-        li.className = itemClass;
-        const val = d.Budget||d.Amount||0;
-        sum += val;
-        li.innerHTML = `<span>${d.Description||''}</span><span>${formatCurrency(val)}</span>`;
+      }).forEach(d=>{
+        const val=d.Budget||d.Amount||0;
+        sum+=val;
+        const li=document.createElement('div'), txt=d.Description||'';
+        li.className=iClass;
+        li.innerHTML=`<span>${txt}</span><span>${formatCurrency(val)}</span>`;
         gDiv.appendChild(li);
       });
-
-      const sumDiv = document.createElement('div');
-      sumDiv.className = 'group-summary';
-      sumDiv.innerHTML = `<span>Group Total</span><span>${formatCurrency(sum)}</span>`;
+      const sumDiv=document.createElement('div');
+      sumDiv.className='group-summary';
+      sumDiv.innerHTML=`<span>Group Total</span><span>${formatCurrency(sum)}</span>`;
       gDiv.appendChild(sumDiv);
-
       reportContainer.appendChild(gDiv);
-      grand += sum;
+      grand+=sum;
     });
 
-    const gt = document.createElement('div');
-    gt.className = 'grand-total';
-    gt.innerHTML = `<span>GRAND TOTAL ${titleLabel.toUpperCase()}</span><span>${formatCurrency(grand)}</span>`;
+    const gt=document.createElement('div');
+    gt.className='grand-total';
+    gt.innerHTML=`<span>GRAND TOTAL ${title.toUpperCase()}</span><span>${formatCurrency(grand)}</span>`;
     reportContainer.appendChild(gt);
   }
 
-  // Live UI update
   document.querySelectorAll('input[name=reportType]')
-    .forEach(r => r.addEventListener('change', renderHtmlReport));
+    .forEach(r=>r.addEventListener('change', renderHtmlReport));
+  downloadPdfButton.addEventListener('click', onDownloadClick);
 
-  // Download dispatch
   async function onDownloadClick() {
     const rpt = document.querySelector('input[name=reportType]:checked').value;
-    if (rpt==='expenses') {
-      await pdfReport(false, false);
-    } else if (rpt==='revenues') {
-      await pdfReport(true, false);
-    } else {
-      await pdfReport(false, true);
-    }
+    if (rpt==='expenses')      await pdfReport(false,false);
+    else if (rpt==='revenues') await pdfReport(true ,false);
+    else                       await pdfReport(false,true );
   }
 
-  // —————————————————————————————————————————————
-  // Core PDF creation v8.1 (with all fields + placeholders)
-  // —————————————————————————————————————————————
-  async function pdfReport(isRevenue, isCombined) {
+  async function pdfReport(isRev,isComb) {
     downloadPdfButton.disabled   = true;
     downloadPdfButton.textContent = 'Generating...';
-
     try {
       const pdfDoc = await PDFDocument.create();
       pdfDoc.registerFontkit(fontkit);
-      const rUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-R.ttf';
-      const bUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-B.ttf';
-      const [rBytes, bBytes] = await Promise.all([
-        fetch(rUrl).then(r => r.arrayBuffer()),
-        fetch(bUrl).then(r => r.arrayBuffer())
+      const [rBytes,bBytes]=await Promise.all([
+        fetch('https://pdf-lib.js.org/assets/ubuntu/Ubuntu-R.ttf').then(r=>r.arrayBuffer()),
+        fetch('https://pdf-lib.js.org/assets/ubuntu/Ubuntu-B.ttf').then(r=>r.arrayBuffer())
       ]);
-      const uf = await pdfDoc.embedFont(rBytes);
-      const ub = await pdfDoc.embedFont(bBytes);
+      const uf=await pdfDoc.embedFont(rBytes), ub=await pdfDoc.embedFont(bBytes);
 
-      // —— REPORT TITLE PLACEHOLDER —— 
+      // first page header
       let page = pdfDoc.addPage();
-      const { width, height } = page.getSize();
-      const left = 50, right = width - 50;
-      let y = height - 50;
-      const reportTitleText = isCombined ? 'Combined Report'
-                             : isRevenue  ? 'Revenues Report'
-                                          : 'Expenses Report';
-      page.drawText(reportTitleText, { x:left, y, font:ub, size:18 });
-      y -= 25;
+      const {width,height} = page.getSize();
+      const left=50, right=width-50;
+      let y=height-50;
 
-      // —— ALWAYS: Event Details —— 
-      page.drawText('Event Details', { x:left, y, font:ub, size:16 });
-      y -= 30;
-      // Name full width
-      page.drawText(`Name: ${currentRecord.Name||'N/A'}`, { x:left, y, font:uf, size:12 });
-      y -= 20;
-      // Other fields in 3-column layout
-      const fields = [
+      // Report title
+      const rptTxt = isComb?'Combined Report':isRev?'Revenues Report':'Expenses Report';
+      page.drawText(rptTxt,{x:left,y,font:ub,size:18});
+      y-=25;
+
+      // Event details
+      page.drawText('Event Details',{x:left,y,font:ub,size:16});
+      y-=30;
+      page.drawText(`Name: ${currentRecord.Name}`,{x:left,y,font:uf,size:12});
+      y-=20;
+      const evtFields=[
         `Code: ${currentRecord.EventCode||'N/A'}`,
         `Sport: ${currentRecord.Sport||'N/A'}`,
         `Discipline: ${currentRecord.Discipline||'N/A'}`,
@@ -467,126 +408,104 @@
         `City: ${currentRecord.CITY||'N/A'}`,
         `Venue: ${currentRecord.VENUE||'N/A'}`,
         `Level: ${currentRecord.LEVEL||'N/A'}`
-        // Uncomment for more fields:
-        // `PERIF_CITY: ${currentRecord.PERIF_CITY||'N/A'}`,
-        // `POOL_SIZE: ${currentRecord.POOL_SIZE||'N/A'}`,
-        // `Organiser: ${currentRecord.Organiser||'N/A'}`,
-        // `CustomField1: ${currentRecord.CustomField1||'N/A'}`
       ];
-      const colWidth = (right - left) / 3;
-      fields.forEach((f, idx) => {
-        const col = idx % 3;
-        const row = Math.floor(idx / 3);
-        const x = left + col * colWidth;
-        const yPos = y - row * 18;
-        page.drawText(f, { x, y: yPos, font:uf, size:12 });
+      const colW=(right-left)/3;
+      evtFields.forEach((f,i)=>{
+        const col=i%3, row=Math.floor(i/3);
+        const x=left+col*colW, yPos=y-row*18;
+        page.drawText(f,{x,y:yPos,font:uf,size:12});
       });
-      y -= Math.ceil(fields.length / 3) * 18 + 10;
+      y -= Math.ceil(evtFields.length/3)*18 + 10;
 
-      // —— Section builder with safe page‐break at y<150 —— 
-      const buildSection = (headers, details, cats, detailRef, label) => {
-        const hdrs = headers.filter(h => {
-          const ref = h.Event;
-          return Array.isArray(ref)?ref[1]===currentRecord.id:ref===currentRecord.id;
-        });
+      // buildSection closure
+      const buildSection = (hdrs, dts, cats, refField, label)=>{
         if (!hdrs.length) return;
-        for (let h of hdrs) {
-          if (y < 150) {
-            page = pdfDoc.addPage();
-            y = height - 60;
-          }
-          const catObj = cats.find(c => c.id === h.Category);
-          const catName = catObj ? catObj.Name : 'No Category';
-          const desc = h.Description ? ` > ${h.Description}` : '';
-          const title = catName + desc;
-          page.drawText(title, { x:left, y, font:ub, size:14 });
-          y -= 20;
-
-          let sum = 0;
-          const lines = details.filter(d => {
-            const ref = d[detailRef];
-            const id  = Array.isArray(ref)?ref[1]:ref;
+        // page break between Exp & Rev
+        if (isComb && label==='Revenues') {
+          page = pdfDoc.addPage();
+          y = height-50;
+        }
+        let sectTotal=0;
+        hdrs.forEach(h=>{
+          if (y<150) { page=pdfDoc.addPage(); y=height-50; }
+          const cat=cats.find(c=>c.id===h.Category);
+          const catName=cat?cat.Name:'No Category';
+          const desc=h.Description?` > ${h.Description}`:'';
+          const titleLine=catName+desc;
+          page.drawText(titleLine,{x:left,y,font:ub,size:14});
+          y-=20;
+          const lines=dts.filter(d=>{
+            const r=d[refField], id=Array.isArray(r)?r[1]:r;
             return id===h.id;
           });
-          for (let d of lines) {
-            if (y < 150) {
-              page = pdfDoc.addPage();
-              y = height - 60;
-            }
-            page.drawText(d.Description||'', { x:left+20, y, font:uf, size:11 });
-            const val = d.Budget||d.Amount||0;
-            const txt = formatCurrency(val);
-            page.drawText(txt, {
-              x: right - uf.widthOfTextAtSize(txt,11),
-              y, font:uf, size:11
+          let sum=0;
+          lines.forEach(d=>{
+            if (y<150){ page=pdfDoc.addPage(); y=height-50; }
+            page.drawText(d.Description||'',{x:left+20,y,font:uf,size:11});
+            const val=d.Budget||d.Amount||0, txt=formatCurrency(val);
+            page.drawText(txt,{
+              x:right-uf.widthOfTextAtSize(txt,11),y,font:uf,size:11
             });
-            y -= 16;
-            sum += val;
-          }
-          if (y < 150) {
-            page = pdfDoc.addPage();
-            y = height - 60;
-          }
-          const sumTxt = formatCurrency(sum);
-          page.drawText('Group Total:', {
-            x: right - 80 - ub.widthOfTextAtSize(sumTxt,12),
-            y, font:ub, size:12
+            // thin line under detail
+            if (enablePdfDetailLines) {
+              page.drawLine({
+                start:{x:left+20,y:y-2},
+                end:  {x:right,y:y-2},
+                thickness:pdfDetailLineWidth,
+                color:pdfDetailLineColor
+              });
+            }
+            y-=16; sum+=val;
           });
-          page.drawText(sumTxt, {
-            x: right - ub.widthOfTextAtSize(sumTxt,12),
-            y, font:ub, size:12
+          if (y<150){ page=pdfDoc.addPage(); y=height-50; }
+          const sumTxt=formatCurrency(sum);
+          page.drawText('Group Total:',{
+            x:right-80-ub.widthOfTextAtSize(sumTxt,12),y,font:ub,size:12
           });
-          y -= 24;
-        }
-
-        if (y < 150) {
-          page = pdfDoc.addPage();
-          y = height - 60;
-        }
-        const sectionTotal = hdrs.reduce((acc,h) => {
-          return acc + details
-            .filter(d => {
-              const ref = d[detailRef];
-              const id  = Array.isArray(ref)?ref[1]:ref;
-              return id===h.id;
-            })
-            .reduce((s,d) => s + (d.Budget||d.Amount||0), 0);
-        }, 0);
-        const secTxt = `TOTAL ${label.toUpperCase()}: ${formatCurrency(sectionTotal)}`;
-        page.drawText(secTxt, {
-          x: right - ub.widthOfTextAtSize(secTxt,14),
-          y, font:ub, size:14
+          page.drawText(sumTxt,{
+            x:right-ub.widthOfTextAtSize(sumTxt,12),y,font:ub,size:12
+          });
+          y-=24; sectTotal+=sum;
+        });
+        if (y<150){ page=pdfDoc.addPage(); y=height-50; }
+        const lbl=`TOTAL ${label.toUpperCase()}: ${formatCurrency(sectTotal)}`;
+        page.drawText(lbl,{
+          x:right-ub.widthOfTextAtSize(lbl,14),y,font:ub,size:14
         });
       };
 
-      if (!isRevenue || isCombined) {
-        buildSection(allExpenses, allExpenseDetails, allExpenseCats, 'Expense', 'Expenses');
-      }
-      if (isRevenue || isCombined) {
-        buildSection(allRevenues, allRevenueDetails, allRevenueCats, 'Revenue', 'Revenues');
-      }
+      // Expenses
+      const expHdrs = allExpenses.filter(h=>{
+        const r=h.Event; return Array.isArray(r)?r[1]===currentRecord.id:r===currentRecord.id;
+      });
+      buildSection(expHdrs, allExpenseDetails, allExpenseCats, 'Expense','Expenses');
 
-      // —— Footer & page numbers —— 
+      // Revenues
+      const revHdrs = allRevenues.filter(h=>{
+        const r=h.Event; return Array.isArray(r)?r[1]===currentRecord.id:r===currentRecord.id;
+      });
+      if (isRev||isComb) buildSection(revHdrs, allRevenueDetails, allRevenueCats,'Revenue','Revenues');
+
+      // Footer & page numbers
       const pages = pdfDoc.getPages();
-      const ts    = new Date().toLocaleString('el-GR');
-      pages.forEach((pg,i) => {
-        pg.drawText(`Date: ${ts}`, { x:50, y:20, font:uf, size:8 });
-        pg.drawText('Generated by RapidShade Widget', { x:170, y:20, font:uf, size:8 });
-        const pnum = `Page ${i+1} of ${pages.length}`;
-        const { width } = pg.getSize();
-        pg.drawText(pnum, {
-          x: width - 50 - uf.widthOfTextAtSize(pnum,8),
-          y: 20, font:uf, size:8
+      const ts = new Date().toLocaleString('el-GR');
+      pages.forEach((pg,i)=>{
+        pg.drawText(`Date: ${ts}`,{x:50,y:20,font:uf,size:8});
+        pg.drawText('Generated by RapidShade Widget',{x:170,y:20,font:uf,size:8});
+        const pn=`Page ${i+1} of ${pages.length}`;
+        const {width} = pg.getSize();
+        pg.drawText(pn,{
+          x:width-50-uf.widthOfTextAtSize(pn,8),y:20,font:uf,size:8
         });
       });
 
-      // —— Save & download —— 
+      // Save & download
       const pdfBytes = await pdfDoc.save();
-      const blob     = new Blob([pdfBytes], {type:'application/pdf'});
+      const blob     = new Blob([pdfBytes],{type:'application/pdf'});
       const url      = URL.createObjectURL(blob);
       const a        = document.createElement('a');
-      a.href         = url;
-      a.download     = `${currentRecord.Name||'report'}_${isCombined?'Combined':(isRevenue?'Revenues':'Expenses')}.pdf`;
+      a.href     = url;
+      a.download = `${currentRecord.Name}_${isComb?'Combined':(isRev?'Revenues':'Expenses')}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
 
@@ -599,18 +518,17 @@
     }
   }
 
-  // Initialization: add any other Events columns you need below, uncommented
+  // Initialization: add any additional Events columns as needed
   grist.ready({
     requiredAccess: 'full',
     columns: [
       'EventCode','Name','Sport','Discipline','DateStart','DateEnd',
       'PERIF_CITY','CITY','VENUE','LEVEL','POOL_SIZE','Organiser'
-      // 'CustomField1','CustomField2','AnotherField', …
+      // ,'CustomField1','CustomField2',…
     ]
   });
   fetchData();
   grist.onRecord(onRecordUpdate);
-  downloadPdfButton.addEventListener('click', onDownloadClick);
 
 </script>
 </body>
