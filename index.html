@@ -203,7 +203,7 @@
             try {
                 // Corrected table names as per your description
                 const rawExpenses = await grist.docApi.fetchTable('Expenses');
-                const rawCategories = await grist.docApi.fetchTable('ExpenseCategory');
+                const rawCategories = await grist.docApi.fetchTable('ExpenseCategories');
                 
                 allExpenses = tableToRecords(rawExpenses);
                 allExpenseCategories = tableToRecords(rawCategories);
