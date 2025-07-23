@@ -145,28 +145,50 @@
             }
         }
 
+        function tableToRecords(data) {
+            if (Array.isArray(data)) {
+                return data;
+            }
+            const records = [];
+            const columns = Object.keys(data);
+            if (columns.length === 0) {
+                return [];
+            }
+            const numRows = data[columns[0]].length;
+            for (let i = 0; i < numRows; i++) {
+                const record = {};
+                for (const column of columns) {
+                    record[column] = data[column][i];
+                }
+                records.push(record);
+            }
+            return records;
+        }
+
         async function fetchDataAndRenderReport() {
             if (!currentRecord) return;
 
             try {
-                expensesData = await grist.docApi.fetchTable('Expenses');
-                // Corrected table name from 'ExpenseCategory' to 'ExpenseCategories'
-                expenseCategoriesData = await grist.docApi.fetchTable('ExpenseCategories');
+                const rawExpenses = await grist.docApi.fetchTable('Expenses');
+                const rawCategories = await grist.docApi.fetchTable('ExpenseCategories');
+
+                expensesData = tableToRecords(rawExpenses);
+                expenseCategoriesData = tableToRecords(rawCategories);
+
                 renderReport();
             } catch (error) {
                 console.error("Error fetching data:", error);
-                reportContainer.innerHTML = `<div class="error-message">Error fetching expense data. Make sure 'Expenses' and 'ExpenseCategories' tables exist.</div>`;
+                reportContainer.innerHTML = `<div class="error-message">Error fetching or processing expense data. Check table names and permissions.</div>`;
             }
         }
 
         function renderReport() {
-            reportContainer.innerHTML = ''; // Clear previous report
-            if (!currentRecord || expensesData.length === 0 || expenseCategoriesData.length === 0) {
+            reportContainer.innerHTML = ''; 
+            if (!currentRecord || !Array.isArray(expensesData) || !Array.isArray(expenseCategoriesData)) {
                 return;
             }
 
             const eventExpenses = expensesData.filter(e => e.Event === currentRecord.id);
-
             const categoryMap = new Map(expenseCategoriesData.map(c => [c.id, c]));
 
             const groupedExpenses = eventExpenses.reduce((acc, expense) => {
@@ -200,7 +222,7 @@
                 for (const item of groupData.items) {
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'expense-item';
-                    itemDiv.innerHTML = `<span>${item.description}</span><span>${item.amount.toLocaleString('el-GR', { style: 'currency', currency: 'EUR' })}</span>`;
+                    itemDiv.innerHTML = `<span>${item.description}</span><span>${(item.amount || 0).toLocaleString('el-GR', { style: 'currency', currency: 'EUR' })}</span>`;
                     groupDiv.appendChild(itemDiv);
                 }
                 reportContainer.appendChild(groupDiv);
@@ -256,14 +278,12 @@
                     y -= lineHeight;
                 };
                 
-                // Event Details
                 const { Name, DateStart, DateEnd, CITY, VENUE } = currentRecord;
                 addDetail('Event', Name);
                 addDetail('Dates', `${formatDate(DateStart)} to ${formatDate(DateEnd)}`);
                 addDetail('Location', `${CITY}, ${VENUE}`);
                 y -= 20;
 
-                // Expenses
                 const eventExpenses = expensesData.filter(e => e.Event === currentRecord.id);
                 const categoryMap = new Map(expenseCategoriesData.map(c => [c.id, c]));
                 const groupedExpenses = eventExpenses.reduce((acc, expense) => {
@@ -293,8 +313,8 @@
                             page = pdfDoc.addPage();
                             y = 780;
                         }
-                        page.drawText(item.description, { x: x + 10, y, font: customFont, size: 10 });
-                        const amountText = item.amount.toLocaleString('el-GR', { style: 'currency', currency: 'EUR' });
+                        page.drawText(String(item.description || ''), { x: x + 10, y, font: customFont, size: 10 });
+                        const amountText = (item.amount || 0).toLocaleString('el-GR', { style: 'currency', currency: 'EUR' });
                         const textWidth = customFont.widthOfTextAtSize(amountText, 10);
                         page.drawText(amountText, { x: 500 - textWidth, y, font: customFont, size: 10 });
                         y -= 15;
