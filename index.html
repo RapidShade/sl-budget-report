@@ -140,7 +140,6 @@
     </style>
     <!-- pdf-lib and fontkit libraries for PDF generation -->
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
-    <script src="https://unpkg.com/@pdf-lib/fontkit/dist/fontkit.umd.min.js"></script>
     <!-- Grist Plugin API -->
     <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
 </head>
@@ -156,16 +155,16 @@
     </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v7.5 Starting");
+  console.log("RapidShade: [WIDGET] v7.6 Starting");
 
-  // Ensure PDF libraries are loaded
-  if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
+  // Ensure PDF-lib is loaded
+  if (typeof PDFLib === 'undefined') {
     document.getElementById('widget-container').innerHTML =
-      '<div class="error-message">Error: PDF Libraries not loaded. Please check your internet connection.</div>';
-    throw new Error("PDF-Lib or fontkit not found.");
+      '<div class="error-message">Error: PDF-lib not loaded.</div>';
+    throw new Error("PDF-lib not found.");
   }
 
-  const { PDFDocument, rgb } = PDFLib;
+  const { PDFDocument, StandardFonts } = PDFLib;
   const messageElement = document.getElementById('message');
   const downloadPdfButton = document.getElementById('downloadPdfButton');
   const recordInfoElement = document.getElementById('record-info');
@@ -206,7 +205,7 @@
       const rawDetails    = await grist.docApi.fetchTable('ExpenseDetails');
       const rawCategories = await grist.docApi.fetchTable('ExpenseCategories');
 
-      allExpenseDetails   = tableToRecords(rawDetails);
+      allExpenseDetails    = tableToRecords(rawDetails);
       allExpenseCategories = tableToRecords(rawCategories);
 
       console.log("RapidShade: Fetched ExpenseDetails:", allExpenseDetails.length);
@@ -247,33 +246,31 @@
       const ref = d.Event;
       return Array.isArray(ref) ? ref[1] === currentRecord.id : ref === currentRecord.id;
     });
-    console.log(`RapidShade: Found ${details.length} lines for event ID ${currentRecord.id}`);
 
     // --- Grouping by category ---
     const categoryMap = new Map(allExpenseCategories.map(c => [c.id, c]));
     let grandTotal = 0;
     const grouped = details.reduce((acc, d) => {
-      const cref = d.ExpenseCategory;
-      const cid  = Array.isArray(cref) ? cref[1] : cref;
-      const cat  = categoryMap.get(cid);
+      const cid = Array.isArray(d.ExpenseCategory) ? d.ExpenseCategory[1] : d.ExpenseCategory;
+      const cat = categoryMap.get(cid);
       if (!cat) { return acc; }
-      const groupName   = cat.Name || 'Uncategorized';
-      const displayOrder = cat.ExpCatCode || 999;
-      if (!acc[groupName]) {
-        acc[groupName] = { items: [], total: 0, displayOrder };
+      const name = cat.Name || 'Uncategorized';
+      const order = cat.ExpCatCode || 999;
+      if (!acc[name]) {
+        acc[name] = { items: [], total: 0, order };
       }
-      // ← SHOW BUDGET instead of Actual
-      acc[groupName].items.push({
+      // ← USE Budget now
+      acc[name].items.push({
         description: d.Description || '',
         amount:      d.Budget      || 0,
       });
-      acc[groupName].total += d.Budget || 0;
+      acc[name].total += d.Budget || 0;
       return acc;
     }, {});
 
     // Sort and render each group
     Object.entries(grouped)
-      .sort(([,a],[,b]) => a.displayOrder - b.displayOrder)
+      .sort(([,a],[,b]) => a.order - b.order)
       .forEach(([grp, data]) => {
         const gdiv = document.createElement('div');
         gdiv.className = 'expense-group';
@@ -299,7 +296,7 @@
     reportContainer.appendChild(gtot);
   }
 
-  // PDF generator – identical grouping logic, now using Budget
+  // PDF generator – now with customBoldFont defined
   async function generatePdfReport() {
     if (!currentRecord) {
       alert("Please select a record first.");
@@ -309,11 +306,9 @@
     downloadPdfButton.textContent = 'Generating...';
 
     try {
-      // ——— PDF setup & fonts ———
+      // PDF setup & embed a built-in bold font
       const pdfDoc = await PDFDocument.create();
-      pdfDoc.registerFontkit(fontkit);
-
-      // (your existing font-fetch/embedding here…)
+      const customBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
       let page = pdfDoc.addPage();
       const { width, height } = page.getSize();
@@ -321,9 +316,9 @@
       const rightMargin = width - leftMargin;
       let y = height - 50;
 
-      // (your existing header & event details drawing…)
+      // (draw header & event details as before…)
 
-      // ——— Filter & group exactly as above ———
+      // Filter & group exactly as HTML
       const details = allExpenseDetails.filter(d => {
         const ref = d.Event;
         return Array.isArray(ref) ? ref[1] === currentRecord.id : ref === currentRecord.id;
@@ -339,7 +334,7 @@
         if (!acc[name]) {
           acc[name] = { items: [], total: 0, order };
         }
-        // ← SHOW BUDGET instead of Actual
+        // ← USE Budget now
         acc[name].items.push({ desc: d.Description || '', amt: d.Budget || 0 });
         acc[name].total += d.Budget || 0;
         return acc;
@@ -382,7 +377,15 @@
         y, font: customBoldFont, size: 14
       });
 
-      // (your existing save & download logic…)
+      // Save & download
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `${currentRecord.Name || 'report'}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
 
     } catch (err) {
       console.error("RapidShade: [WIDGET] Error generating PDF:", err);
@@ -392,7 +395,7 @@
       downloadPdfButton.textContent = 'Download PDF Report';
     }
   }
-  console.log("RapidShade: [WIDGET] v7.5 PDF fix applied");
+  console.log("RapidShade: [WIDGET] v7.6 PDF fix applied");
 
   // Grist init
   grist.ready({
@@ -410,7 +413,6 @@
   function onRecordUpdate(record) {
     currentRecord = record;
     if (record && Object.keys(record).length) {
-      console.log("RapidShade: [WIDGET] Record selected:", record);
       messageElement.style.display = 'none';
       downloadPdfButton.style.display = 'inline-block';
       downloadPdfButton.disabled = false;
