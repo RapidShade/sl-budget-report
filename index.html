@@ -156,7 +156,7 @@
     </div>
 
     <script>
-        console.log("[WIDGET] v7.0 Starting");
+        console.log("[WIDGET] v7.1 Starting");
 
         // Ensure PDF libraries are loaded
         if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
@@ -164,7 +164,7 @@
             throw new Error("PDF-Lib or fontkit not found.");
         }
 
-        const { PDFDocument, rgb, StandardFonts } = PDFLib;
+        const { PDFDocument, rgb } = PDFLib;
         const messageElement = document.getElementById('message');
         const downloadPdfButton = document.getElementById('downloadPdfButton');
         const recordInfoElement = document.getElementById('record-info');
@@ -203,7 +203,7 @@
             try {
                 // Corrected table names as per your description
                 const rawExpenses = await grist.docApi.fetchTable('Expenses');
-                const rawCategories = await grist.docApi.fetchTable('ExpenseCategories');
+                const rawCategories = await grist.docApi.fetchTable('ExpenseCategory');
                 
                 allExpenses = tableToRecords(rawExpenses);
                 allExpenseCategories = tableToRecords(rawCategories);
@@ -211,7 +211,7 @@
                 console.log("Fetched Expense Categories:", allExpenseCategories);
             } catch (error) {
                 console.error("Error fetching data:", error);
-                reportContainer.innerHTML = `<div class="error-message">Error fetching data. Check table names ('Expenses', 'ExpenseCategories') and ensure the widget has 'full' access.</div>`;
+                reportContainer.innerHTML = `<div class="error-message">Error fetching data. Check table names ('Expenses', 'ExpenseCategory') and ensure the widget has 'full' access.</div>`;
             }
         }
 
@@ -342,21 +342,35 @@
             downloadPdfButton.textContent = 'Generating...';
 
             try {
+                // --- FONT LOADING ---
+                // Fetch the font files for UTF-8 support (including Greek characters)
+                const fontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-R.ttf';
+                const boldFontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-B.ttf';
+
+                const [fontBytes, boldFontBytes] = await Promise.all([
+                    fetch(fontUrl).then(res => res.arrayBuffer()),
+                    fetch(boldFontUrl).then(res => res.arrayBuffer())
+                ]);
+                
                 // Create a new PDF document
                 const pdfDoc = await PDFDocument.create();
-                const page = pdfDoc.addPage();
-                const { width, height } = page.getSize();
                 
-                // Embed standard fonts
-                const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-                const helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+                // Register fontkit to handle the custom font
+                pdfDoc.registerFontkit(fontkit);
+
+                // Embed the custom fonts
+                const customFont = await pdfDoc.embedFont(fontBytes);
+                const customBoldFont = await pdfDoc.embedFont(boldFontBytes);
+
+                let page = pdfDoc.addPage();
+                const { width, height } = page.getSize();
 
                 let y = height - 50;
                 const x = 50;
                 const rightMargin = width - 50;
 
                 // --- PDF Header ---
-                page.drawText('Event Budget Report', { x, y, font: helveticaBoldFont, size: 18, color: rgb(0, 0, 0) });
+                page.drawText('Event Budget Report', { x, y, font: customBoldFont, size: 18, color: rgb(0, 0, 0) });
                 y -= 30;
 
                 // --- Event Details Section ---
@@ -369,8 +383,8 @@
                 ];
                 
                 for(const detail of eventDetails) {
-                    page.drawText(`${detail.label}:`, { x, y, font: helveticaBoldFont, size: 10 });
-                    page.drawText(String(detail.value), { x: x + 80, y, font: helveticaFont, size: 10 });
+                    page.drawText(`${detail.label}:`, { x, y, font: customBoldFont, size: 10 });
+                    page.drawText(String(detail.value), { x: x + 80, y, font: customFont, size: 10 });
                     y -= 15;
                 }
                 y -= 20; // Extra space after header
@@ -403,7 +417,7 @@
                     }
 
                     // Group Header
-                    page.drawText(groupName, { x, y, font: helveticaBoldFont, size: 12, color: rgb(0.1, 0.1, 0.1) });
+                    page.drawText(groupName, { x, y, font: customBoldFont, size: 12, color: rgb(0.1, 0.1, 0.1) });
                     y -= 20;
 
                     // Group Items
@@ -412,18 +426,18 @@
                              page = pdfDoc.addPage();
                              y = height - 50;
                         }
-                        page.drawText(String(item.description || ''), { x: x + 10, y, font: helveticaFont, size: 10 });
+                        page.drawText(String(item.description || ''), { x: x + 10, y, font: customFont, size: 10 });
                         const amountText = formatCurrency(item.amount);
-                        const textWidth = helveticaFont.widthOfTextAtSize(amountText, 10);
-                        page.drawText(amountText, { x: rightMargin - textWidth, y, font: helveticaFont, size: 10 });
+                        const textWidth = customFont.widthOfTextAtSize(amountText, 10);
+                        page.drawText(amountText, { x: rightMargin - textWidth, y, font: customFont, size: 10 });
                         y -= 15;
                     }
 
                     // Group Summary
                     const summaryText = formatCurrency(groupData.total);
-                    const summaryWidth = helveticaBoldFont.widthOfTextAtSize(summaryText, 10);
-                    page.drawText('Group Total:', { x: rightMargin - summaryWidth - 70, y, font: helveticaBoldFont, size: 10 });
-                    page.drawText(summaryText, { x: rightMargin - summaryWidth, y, font: helveticaBoldFont, size: 10 });
+                    const summaryWidth = customBoldFont.widthOfTextAtSize(summaryText, 10);
+                    page.drawText('Group Total:', { x: rightMargin - summaryWidth - 70, y, font: customBoldFont, size: 10 });
+                    page.drawText(summaryText, { x: rightMargin - summaryWidth, y, font: customBoldFont, size: 10 });
                     y -= 25; // Extra space after group
                     
                     grandTotal += groupData.total;
@@ -435,8 +449,8 @@
                     y = height - 50;
                 }
                 const grandTotalText = `GRAND TOTAL: ${formatCurrency(grandTotal)}`;
-                const grandTotalWidth = helveticaBoldFont.widthOfTextAtSize(grandTotalText, 14);
-                page.drawText(grandTotalText, { x: rightMargin - grandTotalWidth, y, font: helveticaBoldFont, size: 14, color: rgb(0, 0, 0) });
+                const grandTotalWidth = customBoldFont.widthOfTextAtSize(grandTotalText, 14);
+                page.drawText(grandTotalText, { x: rightMargin - grandTotalWidth, y, font: customBoldFont, size: 14, color: rgb(0, 0, 0) });
 
                 // --- Save and Download PDF ---
                 const pdfBytes = await pdfDoc.save();
