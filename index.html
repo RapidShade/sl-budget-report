@@ -297,116 +297,138 @@
   }
 
   // PDF generator – fetch Ubuntu fonts from pdf-lib.js.org
-  async function generatePdfReport() {
-    if (!currentRecord) {
-      alert("Please select a record first.");
-      return;
-    }
-    downloadPdfButton.disabled = true;
-    downloadPdfButton.textContent = 'Generating...';
-
-    try {
-      const pdfDoc = await PDFDocument.create();
-      pdfDoc.registerFontkit(fontkit);
-
-      // Fetch fonts that support Unicode (including Greek characters)
-      const fontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-R.ttf';
-      const boldFontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-B.ttf';
-      const fontBytes = await fetch(fontUrl).then(r => r.arrayBuffer());
-      const boldFontBytes = await fetch(boldFontUrl).then(r => r.arrayBuffer());
-      const ubuntuFont = await pdfDoc.embedFont(fontBytes);
-      const ubuntuBoldFont = await pdfDoc.embedFont(boldFontBytes);
-
-      let page = pdfDoc.addPage();
-      const { width, height } = page.getSize();
-      const leftMargin  = 50;
-      const rightMargin = width - leftMargin;
-      let y = height - 50;
-
-      // Draw header & event details using ubuntuBoldFont
-      page.drawText(currentRecord.Name || 'Event', {
-        x: leftMargin, y, font: ubuntuBoldFont, size: 16
-      });
-      y -= 30;
-      // (Add dates, location, etc., all with ubuntuFont or ubuntuBoldFont as appropriate)
-
-      // Filter & group exactly as in HTML preview
-      const detailsPdf = allExpenseDetails.filter(d => {
-        const ref = d.Event;
-        return Array.isArray(ref) ? ref[1] === currentRecord.id : ref === currentRecord.id;
-      });
-      const categoryMapPdf = new Map(allExpenseCategories.map(c => [c.id, c]));
-      let grandTotalPdf = 0;
-      const groupedPdf = detailsPdf.reduce((acc, d) => {
-        const cid = Array.isArray(d.ExpenseCategory) ? d.ExpenseCategory[1] : d.ExpenseCategory;
-        const cat = categoryMapPdf.get(cid);
-        if (!cat) { return acc; }
-        const name  = cat.Name || 'Uncategorized';
-        const order = cat.ExpCatCode || 999;
-        if (!acc[name]) {
-          acc[name] = { items: [], total: 0, order };
-        }
-        acc[name].items.push({ desc: d.Description || '', amt: d.Budget || 0 });
-        acc[name].total += d.Budget || 0;
-        return acc;
-      }, {});
-
-      Object.entries(groupedPdf)
-        .sort(([,a],[,b]) => a.order - b.order)
-        .forEach(([grp, data]) => {
-          if (y < 100) { page = pdfDoc.addPage(); y = height - 50; }
-          page.drawText(grp, { x: leftMargin, y, font: ubuntuBoldFont, size: 12 });
-          y -= 20;
-          data.items.forEach(item => {
-            page.drawText(item.desc, {
-              x: leftMargin + 20, y, font: ubuntuFont, size: 10
-            });
-            const amtStr = formatCurrency(item.amt);
-            page.drawText(amtStr, {
-              x: rightMargin - ubuntuFont.widthOfTextAtSize(amtStr, 10),
-              y, font: ubuntuFont, size: 10
-            });
-            y -= 15;
-          });
-          const totStr = formatCurrency(data.total);
-          page.drawText('Subtotal:', {
-            x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(totStr, 10) - 70,
-            y, font: ubuntuBoldFont, size: 10
-          });
-          page.drawText(totStr, {
-            x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(totStr, 10),
-            y, font: ubuntuBoldFont, size: 10
-          });
-          y -= 25;
-          grandTotalPdf += data.total;
-        });
-
-      // Grand total at bottom
-      if (y < 50) { page = pdfDoc.addPage(); y = height - 50; }
-      const grandStr = `GRAND TOTAL: ${formatCurrency(grandTotalPdf)}`;
-      page.drawText(grandStr, {
-        x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(grandStr, 14),
-        y, font: ubuntuBoldFont, size: 14
-      });
-
-      // Save & trigger download
-      const pdfBytes = await pdfDoc.save();
-      const blob     = new Blob([pdfBytes], { type: 'application/pdf' });
-      const url      = URL.createObjectURL(blob);
-      const a        = document.createElement('a');
-      a.href         = url;
-      a.download     = `${currentRecord.Name || 'report'}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-
-    } catch (err) {
-      console.error("RapidShade: [WIDGET] Error generating PDF:", err);
-      recordInfoElement.textContent = 'Error creating PDF. Check console for details.';
-    } finally {
-      downloadPdfButton.disabled = false;
-      downloadPdfButton.textContent = 'Download PDF Report';
-    }
+async function generatePdfReport() {
+  console.log("RapidShade: [WIDGET] v7.11 PDF generator with event data");
+  if (!currentRecord) {
+    alert("Please select an event first.");
+    return;
   }
+  downloadPdfButton.disabled = true;
+  downloadPdfButton.textContent = 'Generating...';
+
+  try {
+    const pdfDoc = await PDFDocument.create();
+    pdfDoc.registerFontkit(fontkit);
+
+    // Fetch Ubuntu fonts
+    const fontUrl     = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-R.ttf';
+    const boldFontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-B.ttf';
+    const [rb, bb]    = await Promise.all([
+      fetch(fontUrl).then(r=>r.arrayBuffer()),
+      fetch(boldFontUrl).then(r=>r.arrayBuffer()),
+    ]);
+    const ubuntuFont     = await pdfDoc.embedFont(rb);
+    const ubuntuBoldFont = await pdfDoc.embedFont(bb);
+
+    let page = pdfDoc.addPage();
+    const { width, height } = page.getSize();
+    const leftMargin  = 50;
+    const rightMargin = width - leftMargin;
+    let y = height - 50;
+
+    // ——— Event header & details ———
+    page.drawText(currentRecord.Name || 'Event', {
+      x: leftMargin, y, font: ubuntuBoldFont, size: 16
+    });
+    y -= 25;
+
+    const eventLines = [
+      `Sport: ${currentRecord.Sport  || 'N/A'}`,
+      `Discipline: ${currentRecord.Discipline || 'N/A'}`,
+      `Dates: ${formatDate(currentRecord.DateStart)} – ${formatDate(currentRecord.DateEnd)}`,
+      `Location: ${currentRecord.CITY || 'N/A'}, ${currentRecord.VENUE || 'N/A'}`,
+      `Level: ${currentRecord.LEVEL || 'N/A'}`
+    ];
+    eventLines.forEach(line => {
+      page.drawText(line, {
+        x: leftMargin, y, font: ubuntuFont, size: 12
+      });
+      y -= 18;
+    });
+
+    y -= 10;  // a bit of spacing before the budget groups
+
+    // ——— Filter & group budget details ———
+    const details = allExpenseDetails.filter(d => {
+      const ref = d.Event;
+      return Array.isArray(ref) ? ref[1] === currentRecord.id : ref === currentRecord.id;
+    });
+    const categoryMap = new Map(allExpenseCategories.map(c=>[c.id,c]));
+    let grandTotal = 0;
+
+    const grouped = details.reduce((acc, d) => {
+      const cid = Array.isArray(d.ExpenseCategory) ? d.ExpenseCategory[1] : d.ExpenseCategory;
+      const cat = categoryMap.get(cid);
+      if (!cat) { return acc; }
+      const name  = cat.Name      || 'Uncategorized';
+      const order = cat.ExpCatCode|| 999;
+      if (!acc[name]) {
+        acc[name] = { items: [], total: 0, order };
+      }
+      acc[name].items.push({ desc: d.Description||'', amt: d.Budget||0 });
+      acc[name].total += d.Budget||0;
+      return acc;
+    }, {});
+
+    Object.entries(grouped)
+      .sort(([,a],[,b]) => a.order - b.order)
+      .forEach(([grp,data]) => {
+        if (y < 120) { page = pdfDoc.addPage(); y = height - 50; }
+        // Category header
+        page.drawText(grp, { x: leftMargin, y, font: ubuntuBoldFont, size: 14 });
+        y -= 22;
+        data.items.forEach(item => {
+          page.drawText(item.desc, {
+            x: leftMargin+20, y, font: ubuntuFont, size: 11
+          });
+          const amt = formatCurrency(item.amt);
+          page.drawText(amt, {
+            x: rightMargin - ubuntuFont.widthOfTextAtSize(amt,11),
+            y, font: ubuntuFont, size: 11
+          });
+          y -= 16;
+        });
+        // Subtotal
+        const sub = formatCurrency(data.total);
+        page.drawText('Group Total:', {
+          x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(sub, 12) - 80,
+          y, font: ubuntuBoldFont, size: 12
+        });
+        page.drawText(sub, {
+          x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(sub, 12),
+          y, font: ubuntuBoldFont, size: 12
+        });
+        y -= 24;
+        grandTotal += data.total;
+      });
+
+    // ——— Grand total ———
+    if (y < 80) { page = pdfDoc.addPage(); y = height - 50; }
+    const grandStr = `GRAND TOTAL: ${formatCurrency(grandTotal)}`;
+    page.drawText(grandStr, {
+      x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(grandStr, 14),
+      y, font: ubuntuBoldFont, size: 14
+    });
+
+    // ——— Save & download ———
+    const pdfBytes = await pdfDoc.save();
+    const blob     = new Blob([pdfBytes], {type:'application/pdf'});
+    const url      = URL.createObjectURL(blob);
+    const a        = document.createElement('a');
+    a.href         = url;
+    a.download     = `${currentRecord.Name||'report'}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+  } catch (e) {
+    console.error("RapidShade: [WIDGET] Error generating PDF:", e);
+    recordInfoElement.textContent = 'Error generating PDF — see console.';
+  } finally {
+    downloadPdfButton.disabled = false;
+    downloadPdfButton.textContent = 'Download PDF Report';
+  }
+}
+
   console.log("RapidShade: [WIDGET] v7.10 PDF fix applied");
 
   // Grist init
