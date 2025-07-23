@@ -149,13 +149,12 @@
         }
     </style>
 
-    <!-- pdf-lib and fontkit libraries for PDF generation -->
+    <!-- pdf-lib and fontkit for PDF generation -->
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <script src="https://unpkg.com/@pdf-lib/fontkit/dist/fontkit.umd.min.js"></script>
     <!-- Grist Plugin API -->
     <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
 </head>
-
 <body>
   <div class="container" id="widget-container">
     <h2>Event PDF Report</h2>
@@ -172,8 +171,9 @@
   </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v7.12 Fixing grouping & combined logic");
+  console.log("RapidShade: [WIDGET] v7.13 ▶️ Fix preview logic and grouping by header records");
 
+  // Ensure PDF-lib and fontkit are loaded
   if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
     document.getElementById('widget-container').innerHTML =
       '<div class="error-message">Error: PDF libraries not loaded.</div>';
@@ -186,79 +186,74 @@
   const recordInfoElement = document.getElementById('record-info');
   const reportContainer   = document.getElementById('report-container');
 
-  let currentRecord = null;
+  let currentRecord     = null;
+  let allExpenses       = [];
   let allExpenseDetails = [];
-  let allExpenseCategories = [];
+  let allRevenues       = [];
   let allRevenueDetails = [];
-  let allRevenueCategories = [];
 
   // —————————————————————————————————————————————
   // Helpers
   // —————————————————————————————————————————————
-  const formatCurrency = (amt) =>
+  const formatCurrency = amt =>
     (amt || 0).toLocaleString('el-GR', { style: 'currency', currency: 'EUR' });
 
   function formatDate(secOrDate) {
     if (!secOrDate) return 'N/A';
-    let d = secOrDate instanceof Date ? secOrDate : new Date(secOrDate * 1000);
+    const d = secOrDate instanceof Date ? secOrDate : new Date(secOrDate*1000);
     return isNaN(d) ? 'Invalid Date' : d.toLocaleDateString('el-GR');
   }
 
   function tableToRecords(data) {
-    if (!data || typeof data !== 'object' || Array.isArray(data)) {
-      return Array.isArray(data) ? data : [];
+    if (!data || typeof data!=='object' || Array.isArray(data)) {
+      return Array.isArray(data)?data:[];
     }
     const cols = Object.keys(data);
-    if (!cols.length || !Array.isArray(data[cols[0]])) {
-      return [];
-    }
-    const n = data[cols[0]].length;
-    const recs = [];
-    for (let i = 0; i < n; i++) {
-      const rec = {};
-      for (let c of cols) { rec[c] = data[c][i]; }
+    if (!cols.length||!Array.isArray(data[cols[0]])) return [];
+    const n = data[cols[0]].length, recs=[];
+    for (let i=0;i<n;i++){
+      const rec={};
+      for(let c of cols) rec[c]=data[c][i];
       recs.push(rec);
     }
     return recs;
   }
 
   // —————————————————————————————————————————————
-  // Fetch Expenses + Revenues
+  // Fetch all necessary tables
   // —————————————————————————————————————————————
   async function fetchData() {
     try {
-      const [ed, ec, rd, rc] = await Promise.all([
+      const [er, ed, rr, rd] = await Promise.all([
+        grist.docApi.fetchTable('Expenses'),
         grist.docApi.fetchTable('ExpenseDetails'),
-        grist.docApi.fetchTable('ExpenseCategories'),
+        grist.docApi.fetchTable('Revenues'),
         grist.docApi.fetchTable('RevenueDetails'),
-        grist.docApi.fetchTable('RevenueCategories'),
       ]);
-      allExpenseDetails    = tableToRecords(ed);
-      allExpenseCategories = tableToRecords(ec);
-      allRevenueDetails    = tableToRecords(rd);
-      allRevenueCategories = tableToRecords(rc);
+      allExpenses       = tableToRecords(er);
+      allExpenseDetails = tableToRecords(ed);
+      allRevenues       = tableToRecords(rr);
+      allRevenueDetails = tableToRecords(rd);
       console.log(
-        `Fetched ${allExpenseDetails.length} expense details, ` +
-        `${allRevenueDetails.length} revenue details`
+        `Loaded ${allExpenses.length} Expenses, ${allRevenues.length} Revenues`
       );
     } catch (e) {
       console.error("Error fetching data:", e);
       reportContainer.innerHTML =
         `<div class="error-message">
-           Error fetching data. Verify tables: ExpenseDetails, ExpenseCategories,
-           RevenueDetails, RevenueCategories.
+           Error fetching tables: Expenses, ExpenseDetails, Revenues, RevenueDetails
          </div>`;
     }
   }
 
   // —————————————————————————————————————————————
-  // On record select
+  // Handle record selection
   // —————————————————————————————————————————————
   function onRecordUpdate(record) {
     currentRecord = record;
     if (record && Object.keys(record).length) {
       messageElement.style.display = 'none';
-      downloadPdfButton.disabled = false;
+      downloadPdfButton.disabled   = false;
       downloadPdfButton.style.display = 'inline-block';
       recordInfoElement.textContent = `Selected: ${record.Name || 'Unnamed Event'}`;
       renderHtmlReport();
@@ -273,72 +268,116 @@
   }
 
   // —————————————————————————————————————————————
-  // Render HTML preview (Expenses only)
+  // Render the HTML preview according to the selected type
   // —————————————————————————————————————————————
   function renderHtmlReport() {
     reportContainer.innerHTML = '';
-    if (!currentRecord || !allExpenseDetails.length) { return; }
+    if (!currentRecord) { return; }
 
-    // Event Details (HTML)
-    const eventDiv = document.createElement('div');
-    eventDiv.className = 'event-details';
-    eventDiv.innerHTML = `
+    // 1) Event details (always)
+    const ev = document.createElement('div');
+    ev.className = 'event-details';
+    ev.innerHTML = `
       <h3>Event Details</h3>
       <div class="event-details-grid">
-        <div class="detail-item"><strong>Event Code:</strong> ${currentRecord.EventCode || 'N/A'}</div>
-        <div class="detail-item"><strong>Name:</strong> ${currentRecord.Name || 'N/A'}</div>
-        <div class="detail-item"><strong>Sport:</strong> ${currentRecord.Sport || 'N/A'}</div>
-        <div class="detail-item"><strong>Discipline:</strong> ${currentRecord.Discipline || 'N/A'}</div>
+        <div class="detail-item"><strong>Code:</strong> ${currentRecord.EventCode||'N/A'}</div>
+        <div class="detail-item"><strong>Name:</strong> ${currentRecord.Name||'N/A'}</div>
+        <div class="detail-item"><strong>Sport:</strong> ${currentRecord.Sport||'N/A'}</div>
+        <div class="detail-item"><strong>Discipline:</strong> ${currentRecord.Discipline||'N/A'}</div>
         <div class="detail-item"><strong>Dates:</strong> ${formatDate(currentRecord.DateStart)} – ${formatDate(currentRecord.DateEnd)}</div>
-        <div class="detail-item"><strong>City:</strong> ${currentRecord.CITY || 'N/A'}</div>
-        <div class="detail-item"><strong>Venue:</strong> ${currentRecord.VENUE || 'N/A'}</div>
-        <div class="detail-item"><strong>Level:</strong> ${currentRecord.LEVEL || 'N/A'}</div>
+        <div class="detail-item"><strong>City:</strong> ${currentRecord.CITY||'N/A'}</div>
+        <div class="detail-item"><strong>Venue:</strong> ${currentRecord.VENUE||'N/A'}</div>
+        <div class="detail-item"><strong>Level:</strong> ${currentRecord.LEVEL||'N/A'}</div>
       </div>`;
-    reportContainer.appendChild(eventDiv);
+    reportContainer.appendChild(ev);
 
-    // Expense grouping (same logic as PDF)
-    const details = allExpenseDetails.filter(d => {
-      const ref = d.Event;
-      return Array.isArray(ref) ? ref[1] === currentRecord.id : ref === currentRecord.id;
-    });
-    // Categories used or all if none
-    const usedIds = new Set(details.map(d =>
-      Array.isArray(d.ExpenseCategory) ? d.ExpenseCategory[1] : d.ExpenseCategory
-    ));
-    const toShow = usedIds.size
-      ? allExpenseCategories.filter(c => usedIds.has(c.id))
-      : allExpenseCategories;
-    toShow.sort((a,b) => (a.ExpCatCode||999) - (b.ExpCatCode||999))
-      .forEach(cat => {
-        const groupDiv = document.createElement('div');
-        groupDiv.className = 'expense-group';
-        groupDiv.innerHTML = `<h3>${cat.Name}</h3>`;
-        const groupItems = details.filter(d =>
-          (Array.isArray(d.ExpenseCategory)?d.ExpenseCategory[1]:d.ExpenseCategory) === cat.id
-        );
-        let grpTotal = 0;
-        if (groupItems.length) {
-          groupItems.forEach(it => {
-            const line = document.createElement('div');
-            line.className = 'expense-item';
-            line.innerHTML = `<span>${it.Description}</span><span>${formatCurrency(it.Budget)}</span>`;
-            groupDiv.appendChild(line);
-            grpTotal += it.Budget||0;
-          });
-        }
-        // Even if no items, still show empty group
-        const sumDiv = document.createElement('div');
-        sumDiv.className = 'group-summary';
-        sumDiv.innerHTML = `<span>Group Total</span><span>${formatCurrency(grpTotal)}</span>`;
-        groupDiv.appendChild(sumDiv);
-        reportContainer.appendChild(groupDiv);
+    // Determine which to show
+    const rpt = document.querySelector('input[name=reportType]:checked').value;
+    if (rpt==='expenses' || rpt==='combined') {
+      renderGroups(
+        'Expenses',
+        allExpenses.filter(e=>{
+          const ref = e.Event;
+          return Array.isArray(ref)?ref[1]===currentRecord.id:ref===currentRecord.id;
+        }),
+        allExpenseDetails, 
+        'Expense', 
+        'expense-group',
+        'expense-item'
+      );
+    }
+    if (rpt==='revenues' || rpt==='combined') {
+      renderGroups(
+        'Revenues',
+        allRevenues.filter(r=>{
+          const ref = r.Event;
+          return Array.isArray(ref)?ref[1]===currentRecord.id:ref===currentRecord.id;
+        }),
+        allRevenueDetails,
+        'Revenue',
+        'revenue-group',
+        'revenue-item'
+      );
+    }
+  }
+
+  // —————————————————————————————————————————————
+  // Render a list of headerRecords (Expenses or Revenues) and their details
+  //
+  // titleLabel: 'Expenses' or 'Revenues'
+  // headers: the filtered array of header records
+  // details: the full details array
+  // detailRef: 'Expense' or 'Revenue' (field name on detail)
+  // groupClass / itemClass: CSS classes to use
+  // —————————————————————————————————————————————
+  function renderGroups(titleLabel, headers, details, detailRef, groupClass, itemClass) {
+    let grand = 0;
+    // Section label
+    const sect = document.createElement('h3');
+    sect.textContent = titleLabel;
+    reportContainer.appendChild(sect);
+
+    // If no headers but at least R/C table has records, we still show empty groups
+    const showAll = headers.length === 0;
+    const groups = showAll
+      ? (detailRef==='Expense'? allExpenses : allRevenues)
+      : headers;
+
+    groups.forEach(h => {
+      const groupDiv = document.createElement('div');
+      groupDiv.className = groupClass;
+      groupDiv.innerHTML = `<h3>${h.Name || h.Code || 'Unnamed'}</h3>`;
+
+      // find details for this header record
+      const lines = details.filter(d=>{
+        const ref = d[detailRef];
+        const id  = Array.isArray(ref)?ref[1]:ref;
+        return id === h.id;
+      });
+      let sum = 0;
+      lines.forEach(d => {
+        const li = document.createElement('div');
+        li.className = itemClass;
+        const val = d.Budget || d.Amount || 0;
+        sum += val;
+        li.innerHTML = `<span>${d.Description||d.LineDescription||''}</span><span>${formatCurrency(val)}</span>`;
+        groupDiv.appendChild(li);
       });
 
-    // Grand total
-    const grand = details.reduce((s,d)=>s + (d.Budget||0), 0);
+      // Even if no lines, sum stays 0
+      const sumDiv = document.createElement('div');
+      sumDiv.className = 'group-summary';
+      sumDiv.innerHTML = `<span>Group Total</span><span>${formatCurrency(sum)}</span>`;
+      groupDiv.appendChild(sumDiv);
+
+      reportContainer.appendChild(groupDiv);
+      grand += sum;
+    });
+
+    // Grand total for this section
     const gt = document.createElement('div');
     gt.className = 'grand-total';
-    gt.innerHTML = `<span>GRAND TOTAL</span><span>${formatCurrency(grand)}</span>`;
+    gt.innerHTML = `<span>GRAND TOTAL ${titleLabel.toUpperCase()}</span><span>${formatCurrency(grand)}</span>`;
     reportContainer.appendChild(gt);
   }
 
@@ -347,209 +386,165 @@
   // —————————————————————————————————————————————
   async function onDownloadClick() {
     const rpt = document.querySelector('input[name=reportType]:checked').value;
-    if (rpt === 'expenses') {
-      await generateExpenseReport();
-    } else if (rpt === 'revenues') {
-      await generateRevenueReport();
+    if (rpt==='expenses') {
+      await pdfReport(false, false);
+    } else if (rpt==='revenues') {
+      await pdfReport(true, false);
     } else {
-      await generateCombinedReport();
+      await pdfReport(false, true);
     }
   }
 
   // —————————————————————————————————————————————
-  // Generate Expenses PDF
+  // Core PDF creation for Expenses/Revenues/Combined
   // —————————————————————————————————————————————
-  async function generateExpenseReport() {
-    console.log("Generating Expenses PDF…");
-    const pdfDoc = await PDFDocument.create();
-    await buildSection(pdfDoc, allExpenseDetails, allExpenseCategories, 'Expenses', false);
-    await finalizeAndDownload(pdfDoc, 'Expenses');
-  }
-
-  // —————————————————————————————————————————————
-  // Generate Revenues PDF
-  // —————————————————————————————————————————————
-  async function generateRevenueReport() {
-    console.log("Generating Revenues PDF…");
-    const pdfDoc = await PDFDocument.create();
-    await buildSection(pdfDoc, allRevenueDetails, allRevenueCategories, 'Revenues', true);
-    await finalizeAndDownload(pdfDoc, 'Revenues');
-  }
-
-  // —————————————————————————————————————————————
-  // Generate Combined PDF
-  // —————————————————————————————————————————————
-  async function generateCombinedReport() {
-    console.log("Generating Combined PDF…");
-    const pdfDoc = await PDFDocument.create();
-    // Section 1: Expenses
-    await buildSection(pdfDoc, allExpenseDetails, allExpenseCategories, 'Expenses', false);
-    // Section 2: Revenues
-    await buildSection(pdfDoc, allRevenueDetails, allRevenueCategories, 'Revenues', true);
-    await finalizeAndDownload(pdfDoc, 'Combined');
-  }
-
-  // —————————————————————————————————————————————
-  // Build one section (header, event, grouping)
-  // —————————————————————————————————————————————
-  async function buildSection(pdfDoc, details, categories, sectionTitle, isRevenue) {
-    // Register fonts once
-    pdfDoc.registerFontkit(fontkit);
-    if (!pdfDoc._fontsLoaded) {
-      // Load Ubuntu fonts
+  async function pdfReport(isRevenue, isCombined) {
+    downloadPdfButton.disabled   = true;
+    downloadPdfButton.textContent = 'Generating...';
+    try {
+      const pdfDoc = await PDFDocument.create();
+      pdfDoc.registerFontkit(fontkit);
+      // load fonts once
       const rUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-R.ttf';
       const bUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-B.ttf';
-      const [rBytes, bBytes] = await Promise.all([
+      const [rB, bB] = await Promise.all([
         fetch(rUrl).then(r=>r.arrayBuffer()),
         fetch(bUrl).then(r=>r.arrayBuffer())
       ]);
-      pdfDoc._uf = await pdfDoc.embedFont(rBytes);
-      pdfDoc._ub = await pdfDoc.embedFont(bBytes);
-      pdfDoc._fontsLoaded = true;
-    }
-    const uf = pdfDoc._uf, ub = pdfDoc._ub;
+      const uf = await pdfDoc.embedFont(rB);
+      const ub = await pdfDoc.embedFont(bB);
 
-    // Add new page
-    const page = pdfDoc.addPage();
-    const { width, height } = page.getSize();
-    const left  = 50;
-    const right = width - 50;
-    let y = height - 60;
+      // helper to build one section
+      const buildSection = async (headers, details, detailRef, label) => {
+        const page = pdfDoc.addPage();
+        const { width, height } = page.getSize();
+        const left = 50, right = width - 50;
+        let y = height - 60;
 
-    // HEADER
-    page.drawText(`Event ${sectionTitle} Report`, {
-      x: left, y: height - 30, font: ub, size: 18
-    });
+        // HEADER TITLE
+        page.drawText(`Event ${label} Report`, { x:left, y:height-30, font:ub, size:18 });
 
-    // EVENT DETAILS (same for all)
-    const eventFields = [
-      `Event Code: ${currentRecord.EventCode || 'N/A'}`,
-      `Name      : ${currentRecord.Name      || 'N/A'}`,
-      `Sport     : ${currentRecord.Sport     || 'N/A'}`,
-      `Discipline: ${currentRecord.Discipline|| 'N/A'}`,
-      `Dates     : ${formatDate(currentRecord.DateStart)} – ${formatDate(currentRecord.DateEnd)}`,
-      `Region    : ${currentRecord.PERIF_CITY|| 'N/A'}`,
-      `City      : ${currentRecord.CITY       || 'N/A'}`,
-      `Venue     : ${currentRecord.VENUE      || 'N/A'}`,
-      `Level     : ${currentRecord.LEVEL      || 'N/A'}`,
-      `Pool Size : ${currentRecord.POOL_SIZE  || 'N/A'}`,
-      `Organiser : ${currentRecord.Organiser  || 'N/A'}`
-    ];
-    y -= 30;
-    eventFields.forEach(line => {
-      page.drawText(line, { x: left, y, font: uf, size: 12 });
-      y -= 16;
-    });
-    y -= 10;
-
-    // GROUPING logic: only categories used in details, else all categories
-    const detailIds = new Set(details.map(d => {
-      const ref = isRevenue ? d.RevenueCategory : d.ExpenseCategory;
-      return Array.isArray(ref) ? ref[1] : ref;
-    }));
-    const showCats = detailIds.size
-      ? categories.filter(c => detailIds.has(c.id))
-      : categories;
-    showCats.sort((a,b) => (a.ExpCatCode||999) - (b.ExpCatCode||999));
-
-    // Draw each group
-    let sectionTotal = 0;
-    for (let cat of showCats) {
-      if (y < 100) {
-        pdfDoc.addPage();
-        y = height - 60;
-      }
-      page.drawText(cat.Name, { x: left, y, font: ub, size: 14 });
-      y -= 20;
-
-      const items = details.filter(d => {
-        const ref = isRevenue ? d.RevenueCategory : d.ExpenseCategory;
-        const cid = Array.isArray(ref) ? ref[1] : ref;
-        return cid === cat.id;
-      });
-      let grpTotal = 0;
-
-      // Draw items (if any)
-      if (items.length) {
-        for (let it of items) {
-          page.drawText(it.Description || it.LineDescription || '', {
-            x: left + 20, y, font: uf, size: 11
-          });
-          const val = isRevenue ? it.Amount : it.Budget;
-          const amt = formatCurrency(val);
-          page.drawText(amt, {
-            x: right - uf.widthOfTextAtSize(amt,11),
-            y, font: uf, size: 11
-          });
+        // Event details (same for all)
+        const evF = [
+          `Code: ${currentRecord.EventCode||'N/A'}`,
+          `Name: ${currentRecord.Name || 'N/A'}`,
+          `Sport: ${currentRecord.Sport || 'N/A'}`,
+          `Discipline: ${currentRecord.Discipline||'N/A'}`,
+          `Dates: ${formatDate(currentRecord.DateStart)} – ${formatDate(currentRecord.DateEnd)}`,
+          `City: ${currentRecord.CITY || 'N/A'}`,
+          `Venue: ${currentRecord.VENUE || 'N/A'}`,
+          `Level: ${currentRecord.LEVEL || 'N/A'}`
+        ];
+        y -= 30;
+        evF.forEach(line => {
+          page.drawText(line, { x:left, y, font:uf, size:12 });
           y -= 16;
-          grpTotal += val || 0;
+        });
+        y -= 10;
+
+        // Determine headers to show
+        const recs = headers.filter(h => {
+          const ref = h.Event;
+          return Array.isArray(ref)?ref[1]===currentRecord.id:ref===currentRecord.id;
+        });
+        const showAll = recs.length===0;
+        const groups  = showAll? headers: recs;
+
+        let sectionTotal = 0;
+        for (let h of groups) {
+          if (y < 100) {
+            pdfDoc.addPage();
+            y = height - 60;
+          }
+          page.drawText(h.Name||h.Code||'Unnamed', { x:left, y, font:ub, size:14 });
+          y -= 20;
+
+          const lines = details.filter(d=>{
+            const ref = d[detailRef];
+            const id  = Array.isArray(ref)?ref[1]:ref;
+            return id === h.id;
+          });
+          let sum = 0;
+          for (let d of lines) {
+            page.drawText(d.Description||d.LineDescription||'', 
+                          { x:left+20, y, font:uf, size:11 });
+            const val = isRevenue? d.Amount : d.Budget;
+            const txt = formatCurrency(val);
+            page.drawText(txt, {
+              x: right - uf.widthOfTextAtSize(txt,11),
+              y, font:uf, size:11
+            });
+            y -= 16;
+            sum += val||0;
+          }
+          const sumTxt = formatCurrency(sum);
+          page.drawText('Group Total:', {
+            x: right - 80 - ub.widthOfTextAtSize(sumTxt,12),
+            y, font:ub, size:12
+          });
+          page.drawText(sumTxt, {
+            x: right - ub.widthOfTextAtSize(sumTxt,12),
+            y, font:ub, size:12
+          });
+          y -= 24;
+          sectionTotal += sum;
         }
+        // Section total
+        if (y < 80) {
+          pdfDoc.addPage();
+          y = height - 60;
+        }
+        const secTxt = `TOTAL ${label.toUpperCase()}: ${formatCurrency(sectionTotal)}`;
+        page.drawText(secTxt, {
+          x: right - ub.widthOfTextAtSize(secTxt,14),
+          y, font:ub, size:14
+        });
+      };
+
+      // Build each requested section
+      if (!isRevenue || isCombined) {
+        await buildSection(allExpenses, allExpenseDetails, 'Expense', 'Expenses');
       }
-      // Even if no items, grpTotal stays 0
-      const grpStr = formatCurrency(grpTotal);
-      page.drawText('Group Total:', {
-        x: right - 80 - ub.widthOfTextAtSize(grpStr,12),
-        y, font: ub, size: 12
-      });
-      page.drawText(grpStr, {
-        x: right - ub.widthOfTextAtSize(grpStr,12),
-        y, font: ub, size: 12
-      });
-      y -= 24;
-      sectionTotal += grpTotal;
-    }
+      if (isRevenue || isCombined) {
+        await buildSection(allRevenues, allRevenueDetails, 'Revenue', 'Revenues');
+      }
 
-    // SECTION TOTAL
-    if (y < 80) {
-      pdfDoc.addPage();
-      y = height - 60;
+      // FOOTER & PAGE NUMBERS
+      const pages = pdfDoc.getPages();
+      const ts    = new Date().toLocaleString('el-GR');
+      const footer = 'Generated by RapidShade Widget';
+      pages.forEach((pg, i) => {
+        pg.drawText(`Date: ${ts}`, { x:50, y:20, font:uf, size:8 });
+        pg.drawText(footer,   { x:170, y:20, font:uf, size:8 });
+        const pnum = `Page ${i+1} of ${pages.length}`;
+        const { width } = pg.getSize();
+        pg.drawText(pnum, {
+          x: width - 50 - uf.widthOfTextAtSize(pnum,8),
+          y:20, font:uf, size:8
+        });
+      });
+
+      // SAVE & DOWNLOAD
+      const pdfBytes = await pdfDoc.save();
+      const blob     = new Blob([pdfBytes], { type:'application/pdf' });
+      const url      = URL.createObjectURL(blob);
+      const a        = document.createElement('a');
+      a.href         = url;
+      a.download     = `${currentRecord.Name||'report'}_${isCombined?'Combined':(isRevenue?'Revenues':'Expenses')}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+    } catch (err) {
+      console.error("PDF gen error:", err);
+      recordInfoElement.textContent = 'Error generating PDF. Check console.';
+    } finally {
+      downloadPdfButton.disabled   = false;
+      downloadPdfButton.textContent = 'Download PDF Report';
     }
-    const secStr = `TOTAL ${sectionTitle.toUpperCase()}: ${formatCurrency(sectionTotal)}`;
-    page.drawText(secStr, {
-      x: right - ub.widthOfTextAtSize(secStr,14),
-      y, font: ub, size: 14
-    });
-    y -= 30;
   }
 
   // —————————————————————————————————————————————
-  // Footer, save, and download
-  // —————————————————————————————————————————————
-  async function finalizeAndDownload(pdfDoc, suffix) {
-    // FOOTER (timestamp, text, page numbers)
-    const pages = pdfDoc.getPages();
-    const timestamp = new Date().toLocaleString('el-GR');
-    const footerText = 'Generated by RapidShade Widget';
-    const uf = pdfDoc._uf;
-    pages.forEach((pg, idx) => {
-      pg.drawText(`Date: ${timestamp}`, { x: 50, y: 20, font: uf, size: 8 });
-      pg.drawText(footerText, { x: 170, y: 20, font: uf, size: 8 });
-      const num = `Page ${idx+1} of ${pages.length}`;
-      const { width } = pg.getSize();
-      pg.drawText(num, {
-        x: width - 50 - uf.widthOfTextAtSize(num,8),
-        y: 20,
-        font: uf,
-        size: 8
-      });
-    });
-
-    // SAVE & DOWNLOAD
-    const pdfBytes = await pdfDoc.save();
-    const blob = new Blob([pdfBytes], { type:'application/pdf' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `${currentRecord.Name || 'report'}_${suffix}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
-
-    downloadPdfButton.disabled = false;
-    downloadPdfButton.textContent = 'Download PDF Report';
-  }
-
-  // —————————————————————————————————————————————
-  // Initialization
+  // Initialize widget
   // —————————————————————————————————————————————
   grist.ready({
     requiredAccess: 'full',
