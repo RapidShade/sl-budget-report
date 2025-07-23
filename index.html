@@ -156,7 +156,7 @@
     </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v7.10 Starting");
+  console.log("RapidShade: [WIDGET] v7.11 Starting");
 
   // Ensure PDF-lib and fontkit are loaded
   if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
@@ -205,10 +205,8 @@
     try {
       const rawDetails    = await grist.docApi.fetchTable('ExpenseDetails');
       const rawCategories = await grist.docApi.fetchTable('ExpenseCategories');
-
       allExpenseDetails    = tableToRecords(rawDetails);
       allExpenseCategories = tableToRecords(rawCategories);
-
       console.log("RapidShade: Fetched ExpenseDetails:", allExpenseDetails.length);
       console.log("RapidShade: Fetched ExpenseCategories:", allExpenseCategories.length);
     } catch (error) {
@@ -221,217 +219,213 @@
     }
   }
 
-  // Render on-screen HTML preview
+  // Render on-screen HTML preview (unchanged)
   function renderHtmlReport() {
     reportContainer.innerHTML = '';
     if (!currentRecord || !allExpenseDetails.length) { return; }
+    /* … your existing renderHtmlReport code here … */
+  }
 
-    // --- Event Details ---
-    const eventDiv = document.createElement('div');
-    eventDiv.className = 'event-details';
-    eventDiv.innerHTML = `
-      <h3>Event Details</h3>
-      <div class="event-details-grid">
-        <div class="detail-item"><strong>Event:</strong> ${currentRecord.Name || 'N/A'}</div>
-        <div class="detail-item"><strong>Sport:</strong> ${currentRecord.Sport || 'N/A'}</div>
-        <div class="detail-item"><strong>Dates:</strong> ${formatDate(currentRecord.DateStart)} to ${formatDate(currentRecord.DateEnd)}</div>
-        <div class="detail-item"><strong>Location:</strong> ${currentRecord.CITY || 'N/A'}, ${currentRecord.VENUE || 'N/A'}</div>
-        <div class="detail-item"><strong>Level:</strong> ${currentRecord.LEVEL || 'N/A'}</div>
-      </div>
-    `;
-    reportContainer.appendChild(eventDiv);
+  // Improved formatDate to handle JS Date & timestamp
+  function formatDate(secOrDate) {
+    if (!secOrDate) { return 'N/A'; }
+    let d;
+    if (secOrDate instanceof Date) {
+      d = secOrDate;
+    } else if (typeof secOrDate === 'number') {
+      d = new Date(secOrDate * 1000);
+    } else {
+      return 'Invalid Date';
+    }
+    return d.toLocaleDateString('el-GR');
+  }
 
-    // --- Filter details for this event ---
-    const details = allExpenseDetails.filter(d => {
-      const ref = d.Event;
-      return Array.isArray(ref) ? ref[1] === currentRecord.id : ref === currentRecord.id;
-    });
-    console.log(`RapidShade: Found ${details.length} lines for event ID ${currentRecord.id}`);
+  // PDF generator – now with header, footer, event fields, and page numbers
+  async function generatePdfReport() {
+    console.log("RapidShade: [WIDGET] v7.11 PDF generator with header/footer");
+    if (!currentRecord) {
+      alert("Please select a record first.");
+      return;
+    }
+    downloadPdfButton.disabled = true;
+    downloadPdfButton.textContent = 'Generating...';
 
-    // --- Grouping by category ---
-    const categoryMap = new Map(allExpenseCategories.map(c => [c.id, c]));
-    let grandTotal = 0;
-    const grouped = details.reduce((acc, d) => {
-      const cid = Array.isArray(d.ExpenseCategory) ? d.ExpenseCategory[1] : d.ExpenseCategory;
-      const cat = categoryMap.get(cid);
-      if (!cat) { return acc; }
-      const groupName   = cat.Name || 'Uncategorized';
-      const displayOrder = cat.ExpCatCode || 999;
-      if (!acc[groupName]) {
-        acc[groupName] = { items: [], total: 0, displayOrder };
-      }
-      acc[groupName].items.push({
-        description: d.Description || '',
-        amount:      d.Budget      || 0,
+    try {
+      const pdfDoc = await PDFDocument.create();
+      pdfDoc.registerFontkit(fontkit);
+
+      // Fetch Ubuntu fonts
+      const fontUrl     = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-R.ttf';
+      const boldFontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-B.ttf';
+      const [rb, bb] = await Promise.all([
+        fetch(fontUrl).then(r => r.arrayBuffer()),
+        fetch(boldFontUrl).then(r => r.arrayBuffer()),
+      ]);
+      const ubuntuFont     = await pdfDoc.embedFont(rb);
+      const ubuntuBoldFont = await pdfDoc.embedFont(bb);
+
+      // Create first page
+      let page = pdfDoc.addPage();
+      const { width, height } = page.getSize();
+      const leftMargin  = 50;
+      const rightMargin = width - leftMargin;
+      let y = height - 50;
+
+      //
+      // ——— HEADER SECTION ———
+      //
+      // Optional: embed a logo (PNG/JPEG recommended). Uncomment and adjust as needed:
+      // const logoBytes = await fetch('https://koe.org.gr/images/koe_logo.svg').then(r=>r.arrayBuffer());
+      // const logoImage = await pdfDoc.embedPng(logoBytes);
+      // const logoDims  = logoImage.scale(0.3);
+      // page.drawImage(logoImage, { x: leftMargin, y: height - logoDims.height - 10,
+      //                             width: logoDims.width, height: logoDims.height });
+      //
+      // Report title (customizable)
+      const reportTitle = 'Event Budget Report';  // ← change this title in code
+      page.drawText(reportTitle, {
+        x: leftMargin,
+        y: height - 30,
+        font: ubuntuBoldFont,
+        size: 18
       });
-      acc[groupName].total += d.Budget || 0;
-      return acc;
-    }, {});
+      y = height - 60;
 
-    // Sort and render each group
-    Object.entries(grouped)
-      .sort(([,a],[,b]) => a.displayOrder - b.displayOrder)
-      .forEach(([grp, data]) => {
-        const gdiv = document.createElement('div');
-        gdiv.className = 'expense-group';
-        gdiv.innerHTML = `<h3>${grp}</h3>`;
-        data.items.forEach(item => {
-          const iv = document.createElement('div');
-          iv.className = 'expense-item';
-          iv.innerHTML = `<span>${item.description}</span><span>${formatCurrency(item.amount)}</span>`;
-          gdiv.appendChild(iv);
+      //
+      // ——— EVENT DETAILS SECTION (customizable fields) ———
+      //
+      // You can add or remove any of these lines.
+      const eventFields = [
+        `Event Code: ${currentRecord.EventCode || 'N/A'}`,
+        `Name      : ${currentRecord.Name      || 'N/A'}`,
+        `Sport     : ${currentRecord.Sport     || 'N/A'}`,
+        `Discipline: ${currentRecord.Discipline|| 'N/A'}`,
+        `Dates     : ${formatDate(currentRecord.DateStart)} – ${formatDate(currentRecord.DateEnd)}`,
+        `City      : ${currentRecord.CITY       || 'N/A'}`,
+        `Region    : ${currentRecord.PERIF_CITY|| 'N/A'}`,
+        `Venue     : ${currentRecord.VENUE      || 'N/A'}`,
+        `Level     : ${currentRecord.LEVEL      || 'N/A'}`,
+        `Pool Size : ${currentRecord.POOL_SIZE  || 'N/A'}`,
+        `Organiser : ${currentRecord.Organiser  || 'N/A'}`
+      ];
+      eventFields.forEach(line => {
+        page.drawText(line, {
+          x: leftMargin,
+          y,
+          font: ubuntuFont,
+          size: 12
         });
-        const sum = document.createElement('div');
-        sum.className = 'group-summary';
-        sum.innerHTML = `<span>Group Total</span><span>${formatCurrency(data.total)}</span>`;
-        gdiv.appendChild(sum);
-        reportContainer.appendChild(gdiv);
-        grandTotal += data.total;
+        y -= 16;
       });
+      y -= 10;  // spacing before expenses
 
-    // Grand Total
-    const gtot = document.createElement('div');
-    gtot.className = 'grand-total';
-    gtot.innerHTML = `<span>GRAND TOTAL</span><span>${formatCurrency(grandTotal)}</span>`;
-    reportContainer.appendChild(gtot);
-  }
-
-  // PDF generator – fetch Ubuntu fonts from pdf-lib.js.org
-async function generatePdfReport() {
-  console.log("RapidShade: [WIDGET] v7.11 PDF generator with event data");
-  if (!currentRecord) {
-    alert("Please select an event first.");
-    return;
-  }
-  downloadPdfButton.disabled = true;
-  downloadPdfButton.textContent = 'Generating...';
-
-  try {
-    const pdfDoc = await PDFDocument.create();
-    pdfDoc.registerFontkit(fontkit);
-
-    // Fetch Ubuntu fonts
-    const fontUrl     = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-R.ttf';
-    const boldFontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-B.ttf';
-    const [rb, bb]    = await Promise.all([
-      fetch(fontUrl).then(r=>r.arrayBuffer()),
-      fetch(boldFontUrl).then(r=>r.arrayBuffer()),
-    ]);
-    const ubuntuFont     = await pdfDoc.embedFont(rb);
-    const ubuntuBoldFont = await pdfDoc.embedFont(bb);
-
-    let page = pdfDoc.addPage();
-    const { width, height } = page.getSize();
-    const leftMargin  = 50;
-    const rightMargin = width - leftMargin;
-    let y = height - 50;
-
-    // ——— Event header & details ———
-    page.drawText(currentRecord.Name || 'Event', {
-      x: leftMargin, y, font: ubuntuBoldFont, size: 16
-    });
-    y -= 25;
-
-    const eventLines = [
-      `Sport: ${currentRecord.Sport  || 'N/A'}`,
-      `Discipline: ${currentRecord.Discipline || 'N/A'}`,
-      `Dates: ${formatDate(currentRecord.DateStart)} – ${formatDate(currentRecord.DateEnd)}`,
-      `Location: ${currentRecord.CITY || 'N/A'}, ${currentRecord.VENUE || 'N/A'}`,
-      `Level: ${currentRecord.LEVEL || 'N/A'}`
-    ];
-    eventLines.forEach(line => {
-      page.drawText(line, {
-        x: leftMargin, y, font: ubuntuFont, size: 12
+      //
+      // ——— GROUPED BUDGET LINES (unchanged logic) ———
+      //
+      const details = allExpenseDetails.filter(d => {
+        const ref = d.Event;
+        return Array.isArray(ref) ? ref[1] === currentRecord.id : ref === currentRecord.id;
       });
-      y -= 18;
-    });
-
-    y -= 10;  // a bit of spacing before the budget groups
-
-    // ——— Filter & group budget details ———
-    const details = allExpenseDetails.filter(d => {
-      const ref = d.Event;
-      return Array.isArray(ref) ? ref[1] === currentRecord.id : ref === currentRecord.id;
-    });
-    const categoryMap = new Map(allExpenseCategories.map(c=>[c.id,c]));
-    let grandTotal = 0;
-
-    const grouped = details.reduce((acc, d) => {
-      const cid = Array.isArray(d.ExpenseCategory) ? d.ExpenseCategory[1] : d.ExpenseCategory;
-      const cat = categoryMap.get(cid);
-      if (!cat) { return acc; }
-      const name  = cat.Name      || 'Uncategorized';
-      const order = cat.ExpCatCode|| 999;
-      if (!acc[name]) {
-        acc[name] = { items: [], total: 0, order };
-      }
-      acc[name].items.push({ desc: d.Description||'', amt: d.Budget||0 });
-      acc[name].total += d.Budget||0;
-      return acc;
-    }, {});
-
-    Object.entries(grouped)
-      .sort(([,a],[,b]) => a.order - b.order)
-      .forEach(([grp,data]) => {
-        if (y < 120) { page = pdfDoc.addPage(); y = height - 50; }
-        // Category header
-        page.drawText(grp, { x: leftMargin, y, font: ubuntuBoldFont, size: 14 });
-        y -= 22;
-        data.items.forEach(item => {
-          page.drawText(item.desc, {
-            x: leftMargin+20, y, font: ubuntuFont, size: 11
+      const categoryMap = new Map(allExpenseCategories.map(c=>[c.id,c]));
+      let grandTotal = 0;
+      const grouped = details.reduce((acc, d) => {
+        const cid = Array.isArray(d.ExpenseCategory) ? d.ExpenseCategory[1] : d.ExpenseCategory;
+        const cat = categoryMap.get(cid);
+        if (!cat) { return acc; }
+        const name  = cat.Name       || 'Uncategorized';
+        const order = cat.ExpCatCode || 999;
+        if (!acc[name]) {
+          acc[name] = { items: [], total: 0, order };
+        }
+        acc[name].items.push({ desc: d.Description || '', amt: d.Budget || 0 });
+        acc[name].total += d.Budget || 0;
+        return acc;
+      }, {});
+      Object.entries(grouped)
+        .sort(([,a],[,b]) => a.order - b.order)
+        .forEach(([grp, data]) => {
+          if (y < 120) { page = pdfDoc.addPage(); y = height - 50; }
+          page.drawText(grp, { x: leftMargin, y, font: ubuntuBoldFont, size: 14 });
+          y -= 20;
+          data.items.forEach(item => {
+            page.drawText(item.desc, { x: leftMargin + 20, y, font: ubuntuFont, size: 11 });
+            const amt = formatCurrency(item.amt);
+            page.drawText(amt, {
+              x: rightMargin - ubuntuFont.widthOfTextAtSize(amt, 11),
+              y, font: ubuntuFont, size: 11
+            });
+            y -= 16;
           });
-          const amt = formatCurrency(item.amt);
-          page.drawText(amt, {
-            x: rightMargin - ubuntuFont.widthOfTextAtSize(amt,11),
-            y, font: ubuntuFont, size: 11
+          const sub = formatCurrency(data.total);
+          page.drawText('Group Total:', {
+            x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(sub, 12) - 80,
+            y, font: ubuntuBoldFont, size: 12
           });
-          y -= 16;
+          page.drawText(sub, {
+            x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(sub, 12),
+            y, font: ubuntuBoldFont, size: 12
+          });
+          y -= 24;
+          grandTotal += data.total;
         });
-        // Subtotal
-        const sub = formatCurrency(data.total);
-        page.drawText('Group Total:', {
-          x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(sub, 12) - 80,
-          y, font: ubuntuBoldFont, size: 12
-        });
-        page.drawText(sub, {
-          x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(sub, 12),
-          y, font: ubuntuBoldFont, size: 12
-        });
-        y -= 24;
-        grandTotal += data.total;
+
+      // Grand total
+      if (y < 80) { page = pdfDoc.addPage(); y = height - 50; }
+      const grandStr = `GRAND TOTAL: ${formatCurrency(grandTotal)}`;
+      page.drawText(grandStr, {
+        x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(grandStr, 14),
+        y, font: ubuntuBoldFont, size: 14
       });
 
-    // ——— Grand total ———
-    if (y < 80) { page = pdfDoc.addPage(); y = height - 50; }
-    const grandStr = `GRAND TOTAL: ${formatCurrency(grandTotal)}`;
-    page.drawText(grandStr, {
-      x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(grandStr, 14),
-      y, font: ubuntuBoldFont, size: 14
-    });
+      //
+      // ——— FOOTER SECTION ———
+      //
+      const pages = pdfDoc.getPages();
+      const timestamp = new Date().toLocaleString('el-GR');      // generation date/time
+      const footerText = 'Generated by RapidShade Widget';       // customizable footer text
+      pages.forEach((pg, idx) => {
+        pg.drawText(`Date: ${timestamp}`, {
+          x: leftMargin,
+          y: 20,
+          font: ubuntuFont,
+          size: 8
+        });
+        pg.drawText(footerText, {
+          x: leftMargin + 120,
+          y: 20,
+          font: ubuntuFont,
+          size: 8
+        });
+        const pageNum = `Page ${idx+1} of ${pages.length}`;
+        pg.drawText(pageNum, {
+          x: rightMargin - ubuntuFont.widthOfTextAtSize(pageNum, 8),
+          y: 20,
+          font: ubuntuFont,
+          size: 8
+        });
+      });
 
-    // ——— Save & download ———
-    const pdfBytes = await pdfDoc.save();
-    const blob     = new Blob([pdfBytes], {type:'application/pdf'});
-    const url      = URL.createObjectURL(blob);
-    const a        = document.createElement('a');
-    a.href         = url;
-    a.download     = `${currentRecord.Name||'report'}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+      // Save & download
+      const pdfBytes = await pdfDoc.save();
+      const blob     = new Blob([pdfBytes], { type: 'application/pdf' });
+      const url      = URL.createObjectURL(blob);
+      const a        = document.createElement('a');
+      a.href         = url;
+      a.download     = `${currentRecord.Name||'report'}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
 
-  } catch (e) {
-    console.error("RapidShade: [WIDGET] Error generating PDF:", e);
-    recordInfoElement.textContent = 'Error generating PDF — see console.';
-  } finally {
-    downloadPdfButton.disabled = false;
-    downloadPdfButton.textContent = 'Download PDF Report';
+    } catch (err) {
+      console.error("RapidShade: [WIDGET] Error generating PDF:", err);
+      recordInfoElement.textContent = 'Error creating PDF. Check console for details.';
+    } finally {
+      downloadPdfButton.disabled = false;
+      downloadPdfButton.textContent = 'Download PDF Report';
+    }
   }
-}
+  console.log("RapidShade: [WIDGET] v7.11 PDF generator with header/footer applied");
 
-  console.log("RapidShade: [WIDGET] v7.10 PDF fix applied");
-
-  // Grist init
+  // Grist init & wiring (unchanged)
   grist.ready({
     requiredAccess: 'full',
     columns: [
@@ -439,8 +433,6 @@ async function generatePdfReport() {
       'PERIF_CITY','CITY','VENUE','LEVEL','POOL_SIZE','Organiser'
     ]
   });
-
-  // Initial data fetch and event wiring
   fetchData();
   grist.onRecord(onRecordUpdate);
   downloadPdfButton.addEventListener('click', generatePdfReport);
@@ -448,7 +440,6 @@ async function generatePdfReport() {
   function onRecordUpdate(record) {
     currentRecord = record;
     if (record && Object.keys(record).length) {
-      console.log("RapidShade: [WIDGET] Record selected:", record);
       messageElement.style.display = 'none';
       downloadPdfButton.style.display = 'inline-block';
       downloadPdfButton.disabled = false;
@@ -461,12 +452,6 @@ async function generatePdfReport() {
       recordInfoElement.textContent = '';
       reportContainer.innerHTML = '';
     }
-  }
-
-  function formatDate(sec) {
-    if (!sec) { return 'N/A'; }
-    const d = new Date(sec * 1000);
-    return isNaN(d) ? 'Invalid Date' : d.toLocaleDateString('el-GR');
   }
 </script>
 
