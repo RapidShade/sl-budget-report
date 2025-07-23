@@ -140,6 +140,7 @@
     </style>
     <!-- pdf-lib and fontkit libraries for PDF generation -->
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    <script src="https://unpkg.com/@pdf-lib/fontkit/dist/fontkit.umd.min.js"></script>
     <!-- Grist Plugin API -->
     <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
 </head>
@@ -155,20 +156,20 @@
     </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v7.6 Starting");
+  console.log("RapidShade: [WIDGET] v7.7 Starting");
 
-  // Ensure PDF-lib is loaded
-  if (typeof PDFLib === 'undefined') {
+  // Ensure PDF-lib and fontkit are loaded
+  if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
     document.getElementById('widget-container').innerHTML =
-      '<div class="error-message">Error: PDF-lib not loaded.</div>';
-    throw new Error("PDF-lib not found.");
+      '<div class="error-message">Error: PDF libraries not loaded.</div>';
+    throw new Error("PDF-lib or fontkit not found.");
   }
 
-  const { PDFDocument, StandardFonts } = PDFLib;
-  const messageElement = document.getElementById('message');
+  const { PDFDocument } = PDFLib;
+  const messageElement    = document.getElementById('message');
   const downloadPdfButton = document.getElementById('downloadPdfButton');
   const recordInfoElement = document.getElementById('record-info');
-  const reportContainer = document.getElementById('report-container');
+  const reportContainer   = document.getElementById('report-container');
 
   let currentRecord = null;
   let allExpenseDetails = [];
@@ -210,7 +211,6 @@
 
       console.log("RapidShade: Fetched ExpenseDetails:", allExpenseDetails.length);
       console.log("RapidShade: Fetched ExpenseCategories:", allExpenseCategories.length);
-
     } catch (error) {
       console.error("Error fetching data:", error);
       reportContainer.innerHTML =
@@ -246,6 +246,7 @@
       const ref = d.Event;
       return Array.isArray(ref) ? ref[1] === currentRecord.id : ref === currentRecord.id;
     });
+    console.log(`RapidShade: Found ${details.length} lines for event ID ${currentRecord.id}`);
 
     // --- Grouping by category ---
     const categoryMap = new Map(allExpenseCategories.map(c => [c.id, c]));
@@ -254,23 +255,22 @@
       const cid = Array.isArray(d.ExpenseCategory) ? d.ExpenseCategory[1] : d.ExpenseCategory;
       const cat = categoryMap.get(cid);
       if (!cat) { return acc; }
-      const name = cat.Name || 'Uncategorized';
-      const order = cat.ExpCatCode || 999;
-      if (!acc[name]) {
-        acc[name] = { items: [], total: 0, order };
+      const groupName   = cat.Name || 'Uncategorized';
+      const displayOrder = cat.ExpCatCode || 999;
+      if (!acc[groupName]) {
+        acc[groupName] = { items: [], total: 0, displayOrder };
       }
-      // ← USE Budget now
-      acc[name].items.push({
+      acc[groupName].items.push({
         description: d.Description || '',
         amount:      d.Budget      || 0,
       });
-      acc[name].total += d.Budget || 0;
+      acc[groupName].total += d.Budget || 0;
       return acc;
     }, {});
 
     // Sort and render each group
     Object.entries(grouped)
-      .sort(([,a],[,b]) => a.order - b.order)
+      .sort(([,a],[,b]) => a.displayOrder - b.displayOrder)
       .forEach(([grp, data]) => {
         const gdiv = document.createElement('div');
         gdiv.className = 'expense-group';
@@ -296,7 +296,7 @@
     reportContainer.appendChild(gtot);
   }
 
-  // PDF generator – now with customBoldFont defined
+  // PDF generator – now embedding Ubuntu font for Greek support
   async function generatePdfReport() {
     if (!currentRecord) {
       alert("Please select a record first.");
@@ -306,26 +306,36 @@
     downloadPdfButton.textContent = 'Generating...';
 
     try {
-      // PDF setup & embed a built-in bold font
+      // Create PDF and register fontkit
       const pdfDoc = await PDFDocument.create();
-      const customBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      pdfDoc.registerFontkit(fontkit);
 
+      // Embed the Ubuntu font (supports Greek)
+      const fontBytes = await fetch('/fonts/Ubuntu-Regular.ttf').then(r => r.arrayBuffer());
+      const ubuntuFont = await pdfDoc.embedFont(fontBytes);
+
+      // Create first page and margins
       let page = pdfDoc.addPage();
       const { width, height } = page.getSize();
       const leftMargin  = 50;
       const rightMargin = width - leftMargin;
       let y = height - 50;
 
-      // (draw header & event details as before…)
+      // Draw header & event details using ubuntuFont
+      page.drawText(currentRecord.Name || 'Event', {
+        x: leftMargin, y, font: ubuntuFont, size: 16
+      });
+      y -= 30;
+      // You can add dates, location, etc., similarly using ubuntuFont
 
-      // Filter & group exactly as HTML
+      // Filter & group exactly as in HTML preview
       const details = allExpenseDetails.filter(d => {
         const ref = d.Event;
         return Array.isArray(ref) ? ref[1] === currentRecord.id : ref === currentRecord.id;
       });
       const categoryMap = new Map(allExpenseCategories.map(c => [c.id, c]));
       let grandTotal = 0;
-      const grouped = details.reduce((acc, d) => {
+      const groupedPdf = details.reduce((acc, d) => {
         const cid = Array.isArray(d.ExpenseCategory) ? d.ExpenseCategory[1] : d.ExpenseCategory;
         const cat = categoryMap.get(cid);
         if (!cat) { return acc; }
@@ -334,56 +344,56 @@
         if (!acc[name]) {
           acc[name] = { items: [], total: 0, order };
         }
-        // ← USE Budget now
         acc[name].items.push({ desc: d.Description || '', amt: d.Budget || 0 });
         acc[name].total += d.Budget || 0;
         return acc;
       }, {});
 
-      Object.entries(grouped)
+      Object.entries(groupedPdf)
         .sort(([,a],[,b]) => a.order - b.order)
         .forEach(([grp, data]) => {
           if (y < 100) { page = pdfDoc.addPage(); y = height - 50; }
-          page.drawText(grp, { x: leftMargin, y, font: customBoldFont, size: 12 });
+          page.drawText(grp, { x: leftMargin, y, font: ubuntuFont, size: 12 });
           y -= 20;
           data.items.forEach(item => {
             page.drawText(item.desc, {
-              x: leftMargin + 20, y, font: customBoldFont, size: 10
+              x: leftMargin + 20, y, font: ubuntuFont, size: 10
             });
             const amtStr = formatCurrency(item.amt);
             page.drawText(amtStr, {
-              x: rightMargin - customBoldFont.widthOfTextAtSize(amtStr, 10),
-              y, font: customBoldFont, size: 10
+              x: rightMargin - ubuntuFont.widthOfTextAtSize(amtStr, 10),
+              y, font: ubuntuFont, size: 10
             });
             y -= 15;
           });
           const totStr = formatCurrency(data.total);
           page.drawText('Subtotal:', {
-            x: rightMargin - customBoldFont.widthOfTextAtSize(totStr, 10) - 70,
-            y, font: customBoldFont, size: 10
+            x: rightMargin - ubuntuFont.widthOfTextAtSize(totStr, 10) - 70,
+            y, font: ubuntuFont, size: 10
           });
           page.drawText(totStr, {
-            x: rightMargin - customBoldFont.widthOfTextAtSize(totStr, 10),
-            y, font: customBoldFont, size: 10
+            x: rightMargin - ubuntuFont.widthOfTextAtSize(totStr, 10),
+            y, font: ubuntuFont, size: 10
           });
           y -= 25;
           grandTotal += data.total;
         });
 
+      // Grand total at bottom
       if (y < 50) { page = pdfDoc.addPage(); y = height - 50; }
       const grandStr = `GRAND TOTAL: ${formatCurrency(grandTotal)}`;
       page.drawText(grandStr, {
-        x: rightMargin - customBoldFont.widthOfTextAtSize(grandStr, 14),
-        y, font: customBoldFont, size: 14
+        x: rightMargin - ubuntuFont.widthOfTextAtSize(grandStr, 14),
+        y, font: ubuntuFont, size: 14
       });
 
-      // Save & download
+      // Save & trigger download
       const pdfBytes = await pdfDoc.save();
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
-      a.download = `${currentRecord.Name || 'report'}.pdf`;
+      const blob     = new Blob([pdfBytes], { type: 'application/pdf' });
+      const url      = URL.createObjectURL(blob);
+      const a        = document.createElement('a');
+      a.href         = url;
+      a.download     = `${currentRecord.Name || 'report'}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
 
@@ -395,7 +405,7 @@
       downloadPdfButton.textContent = 'Download PDF Report';
     }
   }
-  console.log("RapidShade: [WIDGET] v7.6 PDF fix applied");
+  console.log("RapidShade: [WIDGET] v7.7 PDF fix applied");
 
   // Grist init
   grist.ready({
@@ -413,6 +423,7 @@
   function onRecordUpdate(record) {
     currentRecord = record;
     if (record && Object.keys(record).length) {
+      console.log("RapidShade: [WIDGET] Record selected:", record);
       messageElement.style.display = 'none';
       downloadPdfButton.style.display = 'inline-block';
       downloadPdfButton.disabled = false;
