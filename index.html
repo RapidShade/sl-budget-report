@@ -4,10 +4,12 @@
   <title>Event PDF Budget & Revenue Report Widget</title>
   <meta charset="utf-8">
   <style>
-    /* ================== EXISTING CSS ================== */
+    /* ================== EXISTING WIDGET STYLING ================== */
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
-                   Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+      /* Reset & base font stack */
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue",
+                   sans-serif;
       color: #333;
       margin: 0; padding: 20px;
       background-color: #f8f8f8;
@@ -17,18 +19,29 @@
       text-align: center;
     }
     .container {
-      text-align: left;
+      /* Main white card */
       background-color: #fff;
       padding: 30px;
       border-radius: 8px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      max-width: 800px;
-      width: 100%;
+      max-width: 800px; width: 100%;
+      text-align: left;
     }
-    h2 { color: #2c3e50; margin-bottom: 20px; text-align: center; }
-    p  { font-size: 1em; color: #666; margin-bottom: 25px; text-align: center; }
-    .button-container { text-align: center; width: 100%; }
+    h2 {
+      /* Widget title */
+      color: #2c3e50; margin-bottom: 20px; text-align: center;
+    }
+    p {
+      /* Instruction / error text */
+      font-size: 1em; color: #666;
+      margin-bottom: 25px; text-align: center;
+    }
+    .button-container {
+      /* Radio + button row */
+      text-align: center; width: 100%;
+    }
     button {
+      /* Download button */
       background-color: #4CAF50; color: white;
       padding: 12px 25px; border: none; border-radius: 5px;
       cursor: pointer; font-size: 1.1em;
@@ -41,21 +54,29 @@
     input[type="radio"] { margin-right: 5px; }
     label { margin-right: 15px; font-size: 0.95em; color: #555; }
     #record-info {
+      /* Displays selected record name */
       margin-top: 15px; font-size: 0.9em; color: #555;
       min-height: 20px; text-align: center;
     }
     .error-message {
+      /* Fetch / PDF errors */
       color: red; background: #ffe0e0; border: 1px solid red;
       padding: 10px; margin-top: 20px; border-radius: 5px;
     }
-    #report-container { margin-top: 30px; text-align: left; }
+    #report-container { /* In-widget preview area */
+      margin-top: 30px; text-align: left;
+    }
     .event-details {
+      /* “Event Details” box */
       margin-bottom: 25px; padding-bottom: 15px;
       border-bottom: 2px solid #e9ecef;
     }
-    .event-details h3 { color: #2c3e50; margin-bottom: 15px; }
-    /* 2-column grid for event fields */
+    .event-details h3 {
+      /* Section header */
+      color: #2c3e50; margin-bottom: 15px;
+    }
     .event-details-grid {
+      /* Grid for fields (2 columns) */
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 10px;
@@ -65,32 +86,34 @@
     .detail-item strong { color: #495057; }
     .expense-group, .revenue-group { margin-bottom: 20px; }
     .expense-group h3, .revenue-group h3 {
-      /* UI-style gray background for group headers */
+      /* Group headers (UI look) */
       background-color: #e9ecef;
       padding: 10px; border-radius: 4px;
       color: #495057; margin: 0 0 10px 0;
     }
     .expense-item, .revenue-item, .group-summary {
+      /* Lines & totals in preview */
       display: flex; justify-content: space-between;
       padding: 8px 10px; border-bottom: 1px solid #dee2e6;
     }
     .group-summary {
+      /* Bold subtotal line */
       font-weight: bold; background-color: #f8f9fa;
       border-top: 2px solid #dee2e6; margin-top: 5px;
     }
     .grand-total {
+      /* Dark footer‐style total */
       display: flex; justify-content: space-between;
       padding: 12px 10px; margin-top: 20px;
       background-color: #2c3e50; color: white;
-      font-weight: bold; font-size: 1.2em;
-      border-radius: 4px;
+      font-weight: bold; font-size: 1.2em; border-radius: 4px;
     }
     .expense-item:last-child, .revenue-item:last-child {
       border-bottom: none;
     }
   </style>
 
-  <!-- PDF-Lib & fontkit -->
+  <!-- Load PDF-Lib + fontkit -->
   <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
   <script src="https://unpkg.com/@pdf-lib/fontkit/dist/fontkit.umd.min.js"></script>
   <!-- Grist Plugin API -->
@@ -99,64 +122,103 @@
 <body>
   <div class="container" id="widget-container">
     <h2>Event PDF Report</h2>
-    <p id="message">Connecting to Grist... Please select an event record.</p>
+    <p id="message">
+      Connecting to Grist… Please select an event record.
+    </p>
     <div class="button-container">
-      <!-- Report type selector -->
-      <label><input type="radio" name="reportType" value="expenses" checked>Expenses</label>
-      <label><input type="radio" name="reportType" value="revenues">Revenues</label>
-      <label><input type="radio" name="reportType" value="combined">Combined</label>
-      <button id="downloadPdfButton" disabled>Download PDF Report</button>
+      <!-- Choose report type -->
+      <label>
+        <input type="radio" name="reportType" value="expenses" checked>
+        Expenses
+      </label>
+      <label>
+        <input type="radio" name="reportType" value="revenues">
+        Revenues
+      </label>
+      <label>
+        <input type="radio" name="reportType" value="combined">
+        Combined
+      </label>
+      <button id="downloadPdfButton" disabled>
+        Download PDF Report
+      </button>
     </div>
     <div id="record-info"></div>
     <div id="report-container"></div>
   </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v8.9 ▶️ Full-width section bars & net balance");
+  console.log("RapidShade: [WIDGET] v8.11 ▶️ Detailed comments restored");
 
-  // Section headers configurable
+  // === Configuration Constants ===
+
+  // Section headers (can be updated here)
   const SECTION_HEADERS = {
     expenses: 'Expenses Section',
     revenues: 'Revenues Section',
   };
 
-  // PDF detail-line config
+  // PDF detail‐line options
   const enablePdfDetailLines = true;
   const pdfDetailLineWidth   = 0.5;
   const pdfDetailLineColor   = PDFLib.rgb(0.75,0.75,0.75);
 
+  // Grab PDFDocument constructor
   const { PDFDocument } = PDFLib;
+
+  // Variables to hold selected event + fetched data
   let currentRecord;
-  let allExpenses = [],    allExpenseDetails = [], allExpenseCats = [];
-  let allRevenues = [],    allRevenueDetails = [], allRevenueCats = [];
+  let allExpenses = [], allExpenseDetails = [], allExpenseCats = [];
+  let allRevenues = [], allRevenueDetails = [], allRevenueCats = [];
 
-  // Format Euro
-  const fmtCurr = a => (a||0).toLocaleString('el-GR',{style:'currency',currency:'EUR'});
+  // === Utility Functions ===
 
-  // Format date
+  /**
+   * Format a number as EUR currency in el-GR locale.
+   */
+  const fmtCurr = a =>
+    (a || 0).toLocaleString('el-GR', {
+      style: 'currency',
+      currency: 'EUR'
+    });
+
+  /**
+   * Format a Unix timestamp (sec) or Date to el-GR date string.
+   */
   const fmtDate = s => {
-    if (!s) return 'N/A';
-    const d = s instanceof Date ? s : new Date(s*1000);
-    return isNaN(d) ? 'Invalid Date' : d.toLocaleDateString('el-GR');
+    if (!s) { return 'N/A'; }
+    const d = s instanceof Date ? s : new Date(s * 1000);
+    return isNaN(d) ? 'Invalid Date' :
+      d.toLocaleDateString('el-GR');
   };
 
-  // Convert Grist table payload to records
+  /**
+   * Convert Grist API table payload to array of record objects.
+   */
   function toRecs(data) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
       return Array.isArray(data) ? data : [];
     }
     const cols = Object.keys(data);
-    if (!cols.length || !Array.isArray(data[cols[0]])) return [];
-    const n = data[cols[0]].length, out = [];
-    for (let i=0; i<n; i++) {
-      const o = {};
-      cols.forEach(c => o[c] = data[c][i]);
-      out.push(o);
+    if (!cols.length || !Array.isArray(data[cols[0]])) {
+      return [];
+    }
+    const n = data[cols[0]].length;
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const obj = {};
+      cols.forEach(c => obj[c] = data[c][i]);
+      out.push(obj);
     }
     return out;
   }
 
-  // Fetch all tables
+  // === Data Fetching ===
+
+  /**
+   * Fetch all relevant tables: Expenses, ExpenseDetails, ExpenseCategories,
+   * Revenues, RevenueDetails, RevenueCategories.
+   */
   async function fetchData() {
     try {
       const [er, ed, ec, rr, rd, rc] = await Promise.all([
@@ -176,20 +238,29 @@
     } catch (e) {
       console.error("Error fetching data:", e);
       document.getElementById('report-container').innerHTML =
-        '<div class="error-message">Error fetching tables. Check access.</div>';
+        '<div class="error-message">' +
+        'Error fetching tables. Check access.</div>';
     }
   }
 
-  // On record select
+  // === Grist Record Selection ===
+
+  /**
+   * Called whenever the user selects a different Event record in Grist.
+   * Updates UI state and renders preview.
+   */
   function onRecordUpdate(rec) {
     currentRecord = rec;
     const btn = document.getElementById('downloadPdfButton');
     if (rec && Object.keys(rec).length) {
+      // Hide initial message, enable download
       document.getElementById('message').style.display = 'none';
       btn.disabled = false;
-      document.getElementById('record-info').textContent = `Selected: ${rec.Name}`;
+      document.getElementById('record-info').textContent =
+        `Selected: ${rec.Name}`;
       renderHtmlReport();
     } else {
+      // No record: reset UI
       document.getElementById('message').style.display = 'block';
       btn.disabled = true;
       document.getElementById('record-info').textContent = '';
@@ -197,276 +268,498 @@
     }
   }
 
-  // Render HTML preview
+  // === On-Screen HTML Preview ===
+
+  /**
+   * Render the live HTML preview inside the widget.
+   * Shows event data and the selected sections.
+   */
   function renderHtmlReport() {
-    const rc = document.getElementById('report-container');
-    rc.innerHTML = '';
-    if (!currentRecord) return;
-    const rpt = document.querySelector('input[name=reportType]:checked').value;
-    const mainTitle = rpt==='combined'? 'Combined Report' 
-                    : rpt==='revenues'?'Revenues Report':'Expenses Report';
-    rc.appendChild(Object.assign(document.createElement('h3'),{textContent:mainTitle}));
+    const container = document.getElementById('report-container');
+    container.innerHTML = '';
+    if (!currentRecord) { return; }
 
-    // Event details
-    const ev = document.createElement('div');
-    ev.className = 'event-details';
-    ev.innerHTML = `
+    // Determine which report type is selected
+    const rpt = document.querySelector(
+      'input[name=reportType]:checked').value;
+    const mainTitle = rpt === 'combined' ? 'Combined Report'
+                    : rpt === 'revenues' ? 'Revenues Report'
+                                        : 'Expenses Report';
+
+    // Main heading
+    container.appendChild(
+      Object.assign(document.createElement('h3'),
+                    { textContent: mainTitle })
+    );
+
+    // --- Event Details Section ---
+    const eventDiv = document.createElement('div');
+    eventDiv.className = 'event-details';
+    eventDiv.innerHTML = `
       <h3>Event Details</h3>
-      <div class="detail-item full-width"><strong>Name:</strong> ${currentRecord.Name||'N/A'}</div>
+      <!-- Name full-width, wraps if long -->
+      <div class="detail-item full-width">
+        <strong>Name:</strong> ${currentRecord.Name || 'N/A'}
+      </div>
       <div class="event-details-grid">
-        <div class="detail-item"><strong>Code:</strong> ${currentRecord.EventCode||'N/A'}</div>
-        <div class="detail-item"><strong>Sport:</strong> ${currentRecord.Sport||'N/A'}</div>
-        <div class="detail-item"><strong>Discipline:</strong> ${currentRecord.Discipline||'N/A'}</div>
-        <div class="detail-item"><strong>Dates:</strong> ${fmtDate(currentRecord.DateStart)} – ${fmtDate(currentRecord.DateEnd)}</div>
-        <div class="detail-item"><strong>City:</strong> ${currentRecord.CITY||'N/A'}</div>
-        <div class="detail-item"><strong>Venue:</strong> ${currentRecord.VENUE||'N/A'}</div>
-        <div class="detail-item"><strong>Level:</strong> ${currentRecord.LEVEL||'N/A'}</div>
+        <!-- Other fields in 2-column grid -->
+        <div class="detail-item"><strong>Code:</strong> ${currentRecord.EventCode || 'N/A'}</div>
+        <div class="detail-item"><strong>Sport:</strong> ${currentRecord.Sport || 'N/A'}</div>
+        <div class="detail-item"><strong>Discipline:</strong> ${currentRecord.Discipline || 'N/A'}</div>
+        <div class="detail-item"><strong>Dates:</strong> ${fmtDate(currentRecord.DateStart)} &ndash; ${fmtDate(currentRecord.DateEnd)}</div>
+        <div class="detail-item"><strong>City:</strong> ${currentRecord.CITY || 'N/A'}</div>
+        <div class="detail-item"><strong>Venue:</strong> ${currentRecord.VENUE || 'N/A'}</div>
+        <div class="detail-item"><strong>Level:</strong> ${currentRecord.LEVEL || 'N/A'}</div>
       </div>`;
-    rc.appendChild(ev);
+    container.appendChild(eventDiv);
 
-    // Expenses section
-    if ((rpt==='expenses'||rpt==='combined') && allExpenses.length) {
-      rc.appendChild(Object.assign(document.createElement('h3'),{textContent:SECTION_HEADERS.expenses}));
-      renderGroups(rc, allExpenses, allExpenseDetails, allExpenseCats,'Expense');
+    // --- Expenses Section ---
+    if ((rpt === 'expenses' || rpt === 'combined') && allExpenses.length) {
+      container.appendChild(
+        Object.assign(document.createElement('h3'),
+                      { textContent: SECTION_HEADERS.expenses })
+      );
+      renderGroups(container,
+                   allExpenses, allExpenseDetails, allExpenseCats,
+                   'Expense');
     }
 
-    // Revenues section
-    if ((rpt==='revenues'||rpt==='combined') && allRevenues.length) {
-      rc.appendChild(Object.assign(document.createElement('h3'),{textContent:SECTION_HEADERS.revenues}));
-      renderGroups(rc, allRevenues, allRevenueDetails, allRevenueCats,'Revenue');
+    // --- Revenues Section ---
+    if ((rpt === 'revenues' || rpt === 'combined') && allRevenues.length) {
+      container.appendChild(
+        Object.assign(document.createElement('h3'),
+                      { textContent: SECTION_HEADERS.revenues })
+      );
+      renderGroups(container,
+                   allRevenues, allRevenueDetails, allRevenueCats,
+                   'Revenue');
     }
 
-    // No records placeholder
-    if ((rpt==='expenses'&&!allExpenses.length)||
-        (rpt==='revenues'&&!allRevenues.length)||
-        (rpt==='combined'&&!allExpenses.length&&!allRevenues.length)) {
-      rc.appendChild(Object.assign(document.createElement('p'),{textContent:'No records to display.'}));
+    // No-data fallback
+    if ((rpt === 'expenses' && !allExpenses.length) ||
+        (rpt === 'revenues' && !allRevenues.length) ||
+        (rpt === 'combined' && !allExpenses.length && !allRevenues.length)) {
+      container.appendChild(Object.assign(
+        document.createElement('p'),
+        { textContent: 'No records to display.' }
+      ));
     }
   }
 
-  // Render groups in HTML
+  /**
+   * Render each group and its details in the HTML preview.
+   * @param container  The parent element.
+   * @param headers    Array of Expense or Revenue records.
+   * @param details    Array of ExpenseDetails or RevenueDetails.
+   * @param cats       Array of corresponding categories.
+   * @param refField   Field name ("Expense" or "Revenue") to match details.
+   */
   function renderGroups(container, headers, details, cats, refField) {
-    let grand=0;
+    let grandTotal = 0;
+
+    // Filter headers for the current event
     headers
-      .filter(h=> {
-        const r=h.Event; return Array.isArray(r)?r[1]===currentRecord.id:r===currentRecord.id;
+      .filter(h => {
+        const r = h.Event;
+        return Array.isArray(r) ? r[1] === currentRecord.id : r === currentRecord.id;
       })
-      .forEach(h=>{
-        const cat=cats.find(c=>c.id===h.Category);
-        const title=(cat?cat.Name:'No Category')+(h.Description?` > ${h.Description}`:'');
-        const g=document.createElement('div');
-        g.className = refField.toLowerCase()+'-group';
-        g.innerHTML = `<h3>${title}</h3>`;
-        let sum=0;
+      .forEach(h => {
+        // Category lookup
+        const category = cats.find(c => c.id === h.Category);
+        const headerText = (category ? category.Name : 'No Category') +
+                           (h.Description ? ` > ${h.Description}` : '');
+
+        // Group container
+        const groupDiv = document.createElement('div');
+        groupDiv.className = refField.toLowerCase() + '-group';
+        groupDiv.innerHTML = `<h3>${headerText}</h3>`;
+
+        // Render each detail line
+        let groupSum = 0;
         details
-          .filter(d=>{
-            const r=d[refField]; const id=Array.isArray(r)?r[1]:r;
-            return id===h.id;
+          .filter(d => {
+            const r = d[refField];
+            const id = Array.isArray(r) ? r[1] : r;
+            return id === h.id;
           })
-          .forEach(d=>{
-            const val=d.Budget||d.Amount||0; sum+=val;
-            const li=document.createElement('div');
-            li.className=refField.toLowerCase()+'-item';
-            li.innerHTML=`<span>${d.Description||''}</span><span>${fmtCurr(val)}</span>`;
-            g.appendChild(li);
+          .forEach(d => {
+            const value = d.Budget || d.Amount || 0;
+            groupSum += value;
+            const lineDiv = document.createElement('div');
+            lineDiv.className = refField.toLowerCase() + '-item';
+            lineDiv.innerHTML =
+              `<span>${d.Description || ''}</span>` +
+              `<span>${fmtCurr(value)}</span>`;
+            groupDiv.appendChild(lineDiv);
           });
-        const sg=document.createElement('div');
-        sg.className='group-summary';
-        sg.innerHTML=`<span>Group Total</span><span>${fmtCurr(sum)}</span>`;
-        g.appendChild(sg);
-        container.appendChild(g);
-        grand+=sum;
+
+        // Sub-group total (plain text, no dark bar)
+        const summaryDiv = document.createElement('div');
+        summaryDiv.className = 'group-summary';
+        summaryDiv.innerHTML =
+          `<span>Group Total</span><span>${fmtCurr(groupSum)}</span>`;
+        groupDiv.appendChild(summaryDiv);
+
+        container.appendChild(groupDiv);
+        grandTotal += groupSum;
       });
-    const gt=document.createElement('div');
-    gt.className='grand-total';
-    gt.innerHTML=`<span>GRAND TOTAL ${refField.toUpperCase()}</span><span>${fmtCurr(grand)}</span>`;
-    container.appendChild(gt);
+
+    // Section-level grand total in preview
+    const gtDiv = document.createElement('div');
+    gtDiv.className = 'grand-total';
+    gtDiv.innerHTML =
+      `<span>GRAND TOTAL ${refField.toUpperCase()}</span>` +
+      `<span>${fmtCurr(grandTotal)}</span>`;
+    container.appendChild(gtDiv);
   }
 
-  // UI listeners
+  // === Attach UI Event Listeners ===
   document.querySelectorAll('input[name=reportType]')
-    .forEach(r=>r.addEventListener('change', renderHtmlReport));
+    .forEach(radio => radio.addEventListener('change', renderHtmlReport));
   document.getElementById('downloadPdfButton')
     .addEventListener('click', generatePdf);
 
-  // Initial render if a record is pre-selected
-  function initialRender(){
+  /**
+   * Initial render if a record was already selected when widget loaded.
+   */
+  function initialRender() {
     if (currentRecord && Object.keys(currentRecord).length) {
       renderHtmlReport();
     }
   }
 
-  // Generate PDF
+  // === PDF Generation ===
+
+  /**
+   * Build and download the PDF according to the selected report.
+   */
   async function generatePdf() {
     const btn = document.getElementById('downloadPdfButton');
-    btn.disabled=true; btn.textContent='Generating...';
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+
     try {
+      // Create PDF document and register custom fonts
       const pdfDoc = await PDFDocument.create();
       pdfDoc.registerFontkit(fontkit);
-      const [rB,bB]=await Promise.all([
-        fetch('https://pdf-lib.js.org/assets/ubuntu/Ubuntu-R.ttf').then(r=>r.arrayBuffer()),
-        fetch('https://pdf-lib.js.org/assets/ubuntu/Ubuntu-B.ttf').then(r=>r.arrayBuffer())
+
+      // Fetch Ubuntu fonts (regular+bold)
+      const [regBytes, boldBytes] = await Promise.all([
+        fetch('https://pdf-lib.js.org/assets/ubuntu/Ubuntu-R.ttf')
+          .then(r => r.arrayBuffer()),
+        fetch('https://pdf-lib.js.org/assets/ubuntu/Ubuntu-B.ttf')
+          .then(r => r.arrayBuffer())
       ]);
-      const uf=await pdfDoc.embedFont(rB), ub=await pdfDoc.embedFont(bB);
+      const uf = await pdfDoc.embedFont(regBytes);
+      const ub = await pdfDoc.embedFont(boldBytes);
 
-      function drawWrapped(page,text,x,y0,maxW,font,sz,lh){
-        const words=text.split(' '), outLines=[];
-        let line='', y=y0;
-        for(let w of words){
-          const test=line+w+' ';
-          if(font.widthOfTextAtSize(test,sz)>maxW && line){
-            outLines.push(line); line=w+' ';
-          } else line=test;
+      /**
+       * Draw multi-line text, wrapping at maxWidth.
+       * Returns new Y position.
+       */
+      function drawWrapped(page, text, x, y0, maxWidth, font, size, lineHeight) {
+        const words = text.split(' ');
+        let line = '', y = y0;
+        for (let word of words) {
+          const test = line + word + ' ';
+          if (font.widthOfTextAtSize(test, size) > maxWidth && line) {
+            page.drawText(line, { x, y, font, size });
+            y -= lineHeight;
+            line = word + ' ';
+          } else {
+            line = test;
+          }
         }
-        outLines.push(line);
-        outLines.forEach(ln=>{ page.drawText(ln,{x,y,font,sz}); y-=lh; });
-        return y;
+        page.drawText(line, { x, y, font, size });
+        return y - lineHeight;
       }
 
-      let page=pdfDoc.addPage();
-      const {width, height}=page.getSize(), left=50, right=width-50;
-      let y=height-50;
+      // Start with a new page
+      let page = pdfDoc.addPage();
+      const { width, height } = page.getSize();
+      const left = 50, right = width - 50;
+      let y = height - 50;
 
-      const rpt=document.querySelector('input[name=reportType]:checked').value;
-      const titleTxt=rpt==='combined'?'Combined Report':rpt==='revenues'?'Revenues Report':'Expenses Report';
-      page.drawText(titleTxt,{x:left,y,font:ub,size:18}); y-=25;
+      // Determine report type
+      const rpt = document.querySelector(
+        'input[name=reportType]:checked').value;
+      const titleText = rpt === 'combined' ? 'Combined Report'
+                      : rpt === 'revenues' ? 'Revenues Report'
+                                          : 'Expenses Report';
 
-      // Event Details
-      page.drawText('Event Details',{x:left,y,font:ub,size:16}); y-=30;
-      y = drawWrapped(page, `Name: ${currentRecord.Name}`, left, y, right-left, uf,12,14);
-      y-=10;
-      const fields=[
-        `Code: ${currentRecord.EventCode||'N/A'}`,
-        `Sport: ${currentRecord.Sport||'N/A'}`,
-        `Discipline: ${currentRecord.Discipline||'N/A'}`,
+      // Draw report title
+      page.drawText(titleText, { x: left, y, font: ub, size: 18 });
+      y -= 25;
+
+      // --- Event Details Header ---
+      page.drawText('Event Details', { x: left, y, font: ub, size: 16 });
+      y -= 30;
+
+      // Draw wrapped Name (11pt) + extra spacing
+      y = drawWrapped(
+        page,
+        `Name: ${currentRecord.Name}`,
+        left, y,
+        right - left,
+        uf, 11, 13
+      );
+      y -= 10;
+
+      // Other fields in two columns
+      const fields = [
+        `Code: ${currentRecord.EventCode || 'N/A'}`,
+        `Sport: ${currentRecord.Sport || 'N/A'}`,
+        `Discipline: ${currentRecord.Discipline || 'N/A'}`,
         `Dates: ${fmtDate(currentRecord.DateStart)} – ${fmtDate(currentRecord.DateEnd)}`,
-        `City: ${currentRecord.CITY||'N/A'}`,
-        `Venue: ${currentRecord.VENUE||'N/A'}`,
-        `Level: ${currentRecord.LEVEL||'N/A'}`
+        `City: ${currentRecord.CITY || 'N/A'}`,
+        `Venue: ${currentRecord.VENUE || 'N/A'}`,
+        `Level: ${currentRecord.LEVEL || 'N/A'}`
       ];
-      const colW=(right-left)/2;
-      fields.forEach((f,i)=>{
-        const col=i%2,row=Math.floor(i/2);
-        const x=left+col*colW, yy=y-row*18;
-        page.drawText(f,{x,y:yy,font:uf,size:12});
+      const colWidth = (right - left) / 2;
+      fields.forEach((f, idx) => {
+        const col = idx % 2;
+        const row = Math.floor(idx / 2);
+        const x = left + col * colWidth;
+        const yy = y - row * 18;
+        page.drawText(f, { x, y: yy, font: uf, size: 12 });
       });
-      y-=Math.ceil(fields.length/2)*18+20;
+      y -= Math.ceil(fields.length / 2) * 18 + 20;
 
-      // Build section helper
-      async function buildSection(hdrs,dtls,cats,refF,key){
-        const recs=hdrs.filter(h=>{const r=h.Event;return Array.isArray(r)?r[1]===currentRecord.id:r===currentRecord.id;});
-        if(!recs.length) return 0;
-        if(rpt==='combined'&&key==='revenues'){ page=pdfDoc.addPage(); y=height-50; }
-        // full-width gray bar
-        page.drawRectangle({x:left,y:y-4,width:right-left,height:20,color:PDFLib.rgb(0.9,0.9,0.9)});
-        page.drawText(SECTION_HEADERS[key],{x:left,y,font:ub,size:16});
-        y-=28;
-        let secSum=0;
-        for(let h of recs){
-          if(y<120){ page=pdfDoc.addPage(); y=height-50; }
-          // group header bar
-          page.drawRectangle({x:left,y:y-4,width:right-left,height:20,color:PDFLib.rgb(0.95,0.95,0.95)});
-          const cat=cats.find(c=>c.id===h.Category);
-          const head=(cat?cat.Name:'No Category')+(h.Description?` > ${h.Description}`:'');
-          page.drawText(head,{x:left,y,font:ub,size:14}); y-=24;
-          let grp=0;
-          dtls.filter(d=>{const r=d[refF];return Array.isArray(r)?r[1]===h.id:r===h.id})
-            .forEach(d=>{
-              if(y<60){ page=pdfDoc.addPage(); y=height-50; }
-              page.drawText(d.Description||'',{x:left+20,y,font:uf,size:11});
-              const v=d.Budget||d.Amount||0, txt=fmtCurr(v);
-              page.drawText(txt,{x:right-uf.widthOfTextAtSize(txt,11),y,font:uf,size:11});
-              if(enablePdfDetailLines){
-                page.drawLine({start:{x:left+20,y:y-2},end:{x:right,y:y-2},thickness:pdfDetailLineWidth,color:pdfDetailLineColor});
-              }
-              y-=18; grp+=v;
-            });
-          if(y<60){ page=pdfDoc.addPage(); y=height-50; }
-          const grpTxt=fmtCurr(grp);
-          // full-width bar for group total
-          page.drawRectangle({x:left,y:y-4,width:right-left,height:20,color:PDFLib.rgb(0.17,0.24,0.31)});
-          // white text, right-aligned
-          page.drawText(`Group Total: ${grpTxt}`,{
-            x:right-ub.widthOfTextAtSize(`Group Total: ${grpTxt}`,12),
-            y,font:ub,size:12,color:PDFLib.rgb(1,1,1)
-          });
-          y-=30; secSum+=grp;
+      /**
+       * Build a PDF section (Expenses or Revenues).
+       * Returns the section total.
+       */
+      async function buildSection(headers, details, cats, refF, key) {
+        // Filter only those records for current event
+        const recs = headers.filter(h => {
+          const r = h.Event;
+          return Array.isArray(r) ? r[1] === currentRecord.id : r === currentRecord.id;
+        });
+        if (!recs.length) { return 0; }
+
+        // In combined, start Revenues on new page
+        if (rpt === 'combined' && key === 'revenues') {
+          page = pdfDoc.addPage();
+          y = height - 50;
         }
-        if(y<80){ page=pdfDoc.addPage(); y=height-50; }
-        const secTxt=`TOTAL ${key.toUpperCase()}: ${fmtCurr(secSum)}`;
-        // full-width bar for section total
-        page.drawRectangle({x:left,y:y-4,width:right-left,height:20,color:PDFLib.rgb(0.17,0.24,0.31)});
-        page.drawText(secTxt,{x:right-ub.widthOfTextAtSize(secTxt,14),y,font:ub,size:14,color:PDFLib.rgb(1,1,1)});
-        y-=30;
-        return secSum;
+
+        // Draw full-width gray section header bar
+        page.drawRectangle({
+          x: left,
+          y: y - 4,
+          width: right - left,
+          height: 20,
+          color: PDFLib.rgb(0.9, 0.9, 0.9),
+        });
+        // Section title text on top
+        page.drawText(SECTION_HEADERS[key], { x: left, y, font: ub, size: 16 });
+        y -= 28;
+
+        let sectionSum = 0;
+
+        // Loop through each group header
+        for (let h of recs) {
+          // Page break if low on space
+          if (y < 120) {
+            page = pdfDoc.addPage();
+            y = height - 50;
+          }
+
+          // Draw group header bar (slightly lighter)
+          page.drawRectangle({
+            x: left,
+            y: y - 4,
+            width: right - left,
+            height: 20,
+            color: PDFLib.rgb(0.95, 0.95, 0.95),
+          });
+          // Group header text
+          const cat = cats.find(c => c.id === h.Category);
+          const head = (cat ? cat.Name : 'No Category') +
+                       (h.Description ? ` > ${h.Description}` : '');
+          page.drawText(head, { x: left, y, font: ub, size: 14 });
+          y -= 24;
+
+          // Detail lines under this group
+          let groupSum = 0;
+          details
+            .filter(d => {
+              const r = d[refF];
+              return Array.isArray(r) ? r[1] === h.id : r === h.id;
+            })
+            .forEach(d => {
+              if (y < 60) {
+                page = pdfDoc.addPage();
+                y = height - 50;
+              }
+              page.drawText(d.Description || '', { x: left + 20, y, font: uf, size: 11 });
+              const val = d.Budget || d.Amount || 0;
+              const txt = fmtCurr(val);
+              page.drawText(txt, {
+                x: right - uf.widthOfTextAtSize(txt, 11),
+                y, font: uf, size: 11
+              });
+              if (enablePdfDetailLines) {
+                page.drawLine({
+                  start: { x: left + 20, y: y - 2 },
+                  end:   { x: right,      y: y - 2 },
+                  thickness: pdfDetailLineWidth,
+                  color: pdfDetailLineColor
+                });
+              }
+              y -= 18;
+              groupSum += val;
+            });
+
+          // Sub-group total (plain text, no bar)
+          if (y < 60) {
+            page = pdfDoc.addPage();
+            y = height - 50;
+          }
+          const grpTxt = fmtCurr(groupSum);
+          page.drawText('Group Total:', {
+            x: right - 80 - ub.widthOfTextAtSize(grpTxt, 12),
+            y, font: ub, size: 12
+          });
+          page.drawText(grpTxt, {
+            x: right - ub.widthOfTextAtSize(grpTxt, 12),
+            y, font: ub, size: 12
+          });
+          y -= 28;
+
+          sectionSum += groupSum;
+        }
+
+        // Section total with dark bar + white text
+        if (y < 80) {
+          page = pdfDoc.addPage();
+          y = height - 50;
+        }
+        const secTxt = `TOTAL ${key.toUpperCase()}: ${fmtCurr(sectionSum)}`;
+        const w = ub.widthOfTextAtSize(secTxt, 14) + 20;
+        page.drawRectangle({
+          x: right - w,
+          y: y - 4,
+          width: w,
+          height: 20,
+          color: PDFLib.rgb(0.17, 0.24, 0.31),
+        });
+        page.drawText(secTxt, {
+          x: right - w + 10,
+          y,
+          font: ub,
+          size: 14,
+          color: PDFLib.rgb(1,1,1)
+        });
+        y -= 30;
+
+        return sectionSum;
       }
 
-      // Build only needed sections
-      let expSum=0, revSum=0;
-      if(rpt==='expenses'||rpt==='combined'){
-        expSum=await buildSection(allExpenses,allExpenseDetails,allExpenseCats,'Expense','expenses');
+      // Build only the sections we need
+      let expSum = 0, revSum = 0;
+      if (rpt === 'expenses' || rpt === 'combined') {
+        expSum = await buildSection(
+          allExpenses, allExpenseDetails, allExpenseCats,
+          'Expense', 'expenses'
+        );
       }
-      if(rpt==='revenues'||rpt==='combined'){
-        revSum=await buildSection(allRevenues,allRevenueDetails,allRevenueCats,'Revenue','revenues');
-      }
-
-      // Net Balance (revenues - expenses) for combined
-      if(rpt==='combined'){
-        if(y<80){ page=pdfDoc.addPage(); y=height-50; }
-        const bal=revSum-expSum;
-        const balTxt=`Balance: ${fmtCurr(bal)}`;
-        // full-width bar
-        page.drawRectangle({x:left,y:y-4,width:right-left,height:20,color:PDFLib.rgb(0.17,0.24,0.31)});
-        page.drawText(balTxt,{x:right-ub.widthOfTextAtSize(balTxt,14),y,font:ub,size:14,color:PDFLib.rgb(1,1,1)});
-        y-=30;
+      if (rpt === 'revenues' || rpt === 'combined') {
+        revSum = await buildSection(
+          allRevenues, allRevenueDetails, allRevenueCats,
+          'Revenue', 'revenues'
+        );
       }
 
-      // Footer & pagination
-      const pages=pdfDoc.getPages(), ts=new Date().toLocaleString('el-GR');
-      pages.forEach((pg,i)=>{
-        pg.drawText(`Date: ${ts}`,{x:50,y:20,font:uf,size:8});
-        pg.drawText('Generated by RapidShade Widget',{x:170,y:20,font:uf,size:8});
-        const pn=`Page ${i+1} of ${pages.length}`;
-        pg.drawText(pn,{x:pg.getWidth()-50-uf.widthOfTextAtSize(pn,8),y:20,font:uf,size:8});
+      // Net balance line for combined report
+      if (rpt === 'combined') {
+        if (y < 80) {
+          page = pdfDoc.addPage();
+          y = height - 50;
+        }
+        const balance = revSum - expSum;
+        const balTxt = `Balance: ${fmtCurr(balance)}`;
+        const w = ub.widthOfTextAtSize(balTxt, 14) + 20;
+        page.drawRectangle({
+          x: right - w,
+          y: y - 4,
+          width: w,
+          height: 20,
+          color: PDFLib.rgb(0.17,0.24,0.31),
+        });
+        page.drawText(balTxt, {
+          x: right - w + 10,
+          y,
+          font: ub,
+          size: 14,
+          color: PDFLib.rgb(1,1,1)
+        });
+        y -= 30;
+      }
+
+      // Footer & page numbers
+      const pages = pdfDoc.getPages();
+      const timestamp = new Date().toLocaleString('el-GR');
+      pages.forEach((pg, idx) => {
+        // Left: generation timestamp
+        pg.drawText(`Date: ${timestamp}`, {
+          x: 50, y: 20, font: uf, size: 8
+        });
+        // Center: widget credit
+        pg.drawText('Generated by RapidShade Widget', {
+          x: 170, y: 20, font: uf, size: 8
+        });
+        // Right: page X of Y
+        const pn = `Page ${idx+1} of ${pages.length}`;
+        pg.drawText(pn, {
+          x: pg.getWidth() - 50 - uf.widthOfTextAtSize(pn, 8),
+          y: 20, font: uf, size: 8
+        });
       });
 
-      // Save & download
-      const pdfBytes=await pdfDoc.save();
-      const blob=new Blob([pdfBytes],{type:'application/pdf'});
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a');
-      a.href=url;
-      a.download=`${currentRecord.Name}_${rpt==='combined'?'Combined':(rpt==='revenues'?'Revenues':'Expenses')}.pdf`;
+      // Save and trigger download
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `${currentRecord.Name}_${rpt==='combined'?'Combined':(rpt==='revenues'?'Revenues':'Expenses')}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
 
-    } catch(e) {
-      console.error("PDF gen error:", e);
-      document.getElementById('record-info').textContent='Error generating PDF.';
+    } catch (error) {
+      console.error("PDF gen error:", error);
+      document.getElementById('record-info').textContent =
+        'Error generating PDF.';
     } finally {
-      const btn=document.getElementById('downloadPdfButton');
-      btn.disabled=false;
-      btn.textContent='Download PDF Report';
+      btn.disabled = false;
+      btn.textContent = 'Download PDF Report';
     }
   }
 
-  // Initialize plugin
+  // === Initialization ===
+
+  // Request all needed Event columns from Grist
   grist.ready({
-    requiredAccess:'full',
-    columns:[
+    requiredAccess: 'full',
+    columns: [
       'EventCode','Name','Sport','Discipline','DateStart','DateEnd',
       'PERIF_CITY','CITY','VENUE','LEVEL','POOL_SIZE','Organiser'
     ]
   });
 
-  // Fetch data & listeners
+  // Fetch tables & attach record listener
   fetchData();
   grist.onRecord(onRecordUpdate);
+
+  // Attach UI handlers
   document.querySelectorAll('input[name=reportType]')
-    .forEach(r=>r.addEventListener('change', renderHtmlReport));
+    .forEach(radio => radio.addEventListener('change', renderHtmlReport));
   document.getElementById('downloadPdfButton')
     .addEventListener('click', generatePdf);
-  setTimeout(() => { if(currentRecord) renderHtmlReport(); }, 200);
+
+  // If a record was already selected on widget load, render it
+  setTimeout(initialRender, 200);
 </script>
 </body>
 </html>
