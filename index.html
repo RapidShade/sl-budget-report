@@ -156,7 +156,7 @@
     </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v7.8 Starting");
+  console.log("RapidShade: [WIDGET] v7.10 Starting");
 
   // Ensure PDF-lib and fontkit are loaded
   if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
@@ -296,7 +296,7 @@
     reportContainer.appendChild(gtot);
   }
 
-  // PDF generator – now embedding Ubuntu font via relative path
+  // PDF generator – fetch Ubuntu fonts from pdf-lib.js.org
   async function generatePdfReport() {
     if (!currentRecord) {
       alert("Please select a record first.");
@@ -306,27 +306,29 @@
     downloadPdfButton.textContent = 'Generating...';
 
     try {
-      // Create PDF and register fontkit
       const pdfDoc = await PDFDocument.create();
       pdfDoc.registerFontkit(fontkit);
 
-      // Embed the Ubuntu font (supports Greek) from a relative path
-      const fontBytes = await fetch('fonts/Ubuntu-Regular.ttf').then(r => r.arrayBuffer());
+      // Fetch fonts that support Unicode (including Greek characters)
+      const fontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-R.ttf';
+      const boldFontUrl = 'https://pdf-lib.js.org/assets/ubuntu/Ubuntu-B.ttf';
+      const fontBytes = await fetch(fontUrl).then(r => r.arrayBuffer());
+      const boldFontBytes = await fetch(boldFontUrl).then(r => r.arrayBuffer());
       const ubuntuFont = await pdfDoc.embedFont(fontBytes);
+      const ubuntuBoldFont = await pdfDoc.embedFont(boldFontBytes);
 
-      // Create first page and margins
       let page = pdfDoc.addPage();
       const { width, height } = page.getSize();
       const leftMargin  = 50;
       const rightMargin = width - leftMargin;
       let y = height - 50;
 
-      // Draw header & event details using ubuntuFont
+      // Draw header & event details using ubuntuBoldFont
       page.drawText(currentRecord.Name || 'Event', {
-        x: leftMargin, y, font: ubuntuFont, size: 16
+        x: leftMargin, y, font: ubuntuBoldFont, size: 16
       });
       y -= 30;
-      // (add dates, location, etc., with ubuntuFont as needed)
+      // (Add dates, location, etc., all with ubuntuFont or ubuntuBoldFont as appropriate)
 
       // Filter & group exactly as in HTML preview
       const detailsPdf = allExpenseDetails.filter(d => {
@@ -353,7 +355,7 @@
         .sort(([,a],[,b]) => a.order - b.order)
         .forEach(([grp, data]) => {
           if (y < 100) { page = pdfDoc.addPage(); y = height - 50; }
-          page.drawText(grp, { x: leftMargin, y, font: ubuntuFont, size: 12 });
+          page.drawText(grp, { x: leftMargin, y, font: ubuntuBoldFont, size: 12 });
           y -= 20;
           data.items.forEach(item => {
             page.drawText(item.desc, {
@@ -368,12 +370,12 @@
           });
           const totStr = formatCurrency(data.total);
           page.drawText('Subtotal:', {
-            x: rightMargin - ubuntuFont.widthOfTextAtSize(totStr, 10) - 70,
-            y, font: ubuntuFont, size: 10
+            x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(totStr, 10) - 70,
+            y, font: ubuntuBoldFont, size: 10
           });
           page.drawText(totStr, {
-            x: rightMargin - ubuntuFont.widthOfTextAtSize(totStr, 10),
-            y, font: ubuntuFont, size: 10
+            x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(totStr, 10),
+            y, font: ubuntuBoldFont, size: 10
           });
           y -= 25;
           grandTotalPdf += data.total;
@@ -383,8 +385,8 @@
       if (y < 50) { page = pdfDoc.addPage(); y = height - 50; }
       const grandStr = `GRAND TOTAL: ${formatCurrency(grandTotalPdf)}`;
       page.drawText(grandStr, {
-        x: rightMargin - ubuntuFont.widthOfTextAtSize(grandStr, 14),
-        y, font: ubuntuFont, size: 14
+        x: rightMargin - ubuntuBoldFont.widthOfTextAtSize(grandStr, 14),
+        y, font: ubuntuBoldFont, size: 14
       });
 
       // Save & trigger download
@@ -405,7 +407,7 @@
       downloadPdfButton.textContent = 'Download PDF Report';
     }
   }
-  console.log("RapidShade: [WIDGET] v7.8 PDF fix applied");
+  console.log("RapidShade: [WIDGET] v7.10 PDF fix applied");
 
   // Grist init
   grist.ready({
