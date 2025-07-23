@@ -171,7 +171,7 @@
   </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v7.14.1 ▶️ Fix group titles & always-show event header");
+  console.log("RapidShade: [WIDGET] v8.0 ▶️ Final tweaks: clean titles & heading placeholder");
 
   if (typeof PDFLib === 'undefined' || typeof fontkit === 'undefined') {
     document.getElementById('widget-container').innerHTML =
@@ -274,11 +274,21 @@
   }
 
   // —————————————————————————————————————————————
-  // Render on-screen preview based on radio selection
+  // Render on-screen preview
   // —————————————————————————————————————————————
   function renderHtmlReport() {
     reportContainer.innerHTML = '';
     if (!currentRecord) { return; }
+
+    // REPORT HEADING PLACEHOLDER
+    // — change text here if you want a custom heading
+    const rpt = document.querySelector('input[name=reportType]:checked').value;
+    const headingText = rpt==='expenses' ? 'Expenses Report' 
+                      : rpt==='revenues' ? 'Revenues Report' 
+                      : 'Combined Report';
+    const heading = document.createElement('h3');
+    heading.textContent = headingText;
+    reportContainer.appendChild(heading);
 
     // ALWAYS: Event details
     const ev = document.createElement('div');
@@ -297,8 +307,6 @@
       </div>`;
     reportContainer.appendChild(ev);
 
-    const rpt = document.querySelector('input[name=reportType]:checked').value;
-
     // EXPENSES
     if ((rpt==='expenses' || rpt==='combined') && allExpenses.length) {
       renderGroups(
@@ -311,7 +319,6 @@
         'expense-item'
       );
     }
-
     // REVENUES
     if ((rpt==='revenues' || rpt==='combined') && allRevenues.length) {
       renderGroups(
@@ -324,7 +331,6 @@
         'revenue-item'
       );
     }
-
     // NOTHING TO SHOW?
     if (
       (rpt==='expenses' && !allExpenses.length) ||
@@ -346,24 +352,23 @@
     sect.textContent = titleLabel;
     reportContainer.appendChild(sect);
 
-    // Filter headers for this event
     const hdrs = headers.filter(h => {
       const ref = h.Event;
       return Array.isArray(ref) ? ref[1]===currentRecord.id : ref===currentRecord.id;
     });
 
     hdrs.forEach(h => {
-      // Group title = Category > Header Description
-      const catId = h.Category;
-      const cat   = cats.find(c=>c.id===catId);
-      const title = (cat?cat.Name:'No Category') + ' > ' + (h.Description||h.Name||`#${h.id}`);
+      // GROUP TITLE = Category > Description
+      const catObj = cats.find(c => c.id === h.Category);
+      const title  = (catObj ? catObj.Name : 'No Category')
+                        + ' > '
+                        + (h.Description||h.Name||'(no desc)');
 
       const gDiv = document.createElement('div');
       gDiv.className = groupClass;
       gDiv.innerHTML = `<h3>${title}</h3>`;
 
-      // Detail lines
-      const lines = details.filter(d=>{
+      const lines = details.filter(d => {
         const ref = d[detailRef];
         const id  = Array.isArray(ref)?ref[1]:ref;
         return id===h.id;
@@ -378,7 +383,6 @@
         gDiv.appendChild(li);
       });
 
-      // Group total
       const sumDiv = document.createElement('div');
       sumDiv.className = 'group-summary';
       sumDiv.innerHTML = `<span>Group Total</span><span>${formatCurrency(sum)}</span>`;
@@ -388,18 +392,17 @@
       grand += sum;
     });
 
-    // Section grand total
     const gt = document.createElement('div');
     gt.className = 'grand-total';
     gt.innerHTML = `<span>GRAND TOTAL ${titleLabel.toUpperCase()}</span><span>${formatCurrency(grand)}</span>`;
     reportContainer.appendChild(gt);
   }
 
-  // Re-render preview on radio change
+  // live UI update
   document.querySelectorAll('input[name=reportType]')
     .forEach(r => r.addEventListener('change', renderHtmlReport));
 
-  // Download dispatch
+  // download dispatch
   async function onDownloadClick() {
     const rpt = document.querySelector('input[name=reportType]:checked').value;
     if (rpt==='expenses') {
@@ -412,12 +415,11 @@
   }
 
   // —————————————————————————————————————————————
-  // Core PDF creation
+  // Core PDF creation v8.0
   // —————————————————————————————————————————————
   async function pdfReport(isRevenue, isCombined) {
     downloadPdfButton.disabled   = true;
     downloadPdfButton.textContent = 'Generating...';
-
     try {
       const pdfDoc = await PDFDocument.create();
       pdfDoc.registerFontkit(fontkit);
@@ -430,12 +432,20 @@
       const uf = await pdfDoc.embedFont(rBytes);
       const ub = await pdfDoc.embedFont(bBytes);
 
-      // — ALWAYS: draw Event header on first page —
+      // —— Placeholder REPORT TITLE —— 
       let page = pdfDoc.addPage();
       const { width, height } = page.getSize();
       const left = 50, right = width - 50;
       let y = height - 50;
-      page.drawText('Event Details', { x:left, y, font:ub, size:18 });
+      const reportTitleText = isCombined ? 'Combined Report'
+                             : isRevenue  ? 'Revenues Report'
+                                          : 'Expenses Report';
+      // ← change this placeholder if you want a different heading
+      page.drawText(reportTitleText, { x:left, y, font:ub, size:18 });
+      y -= 25;
+
+      // —— ALWAYS: Event Details —— 
+      page.drawText('Event Details', { x:left, y, font:ub, size:16 });
       y -= 30;
       const evF = [
         `Code: ${currentRecord.EventCode||'N/A'}`,
@@ -452,41 +462,39 @@
         y -= 18;
       });
 
-      // Section builder
+      // —— Section builder with safe page‐break at y<150 —— 
       const buildSection = (headers, details, cats, detailRef, label) => {
-        // Filter header records for this event
         const hdrs = headers.filter(h => {
           const ref = h.Event;
           return Array.isArray(ref)?ref[1]===currentRecord.id:ref===currentRecord.id;
         });
-        if (!hdrs.length) { return; }
-
+        if (!hdrs.length) return;
         for (let h of hdrs) {
-          if (y < 150) {  // safe threshold above footer
+          if (y < 150) {
             page = pdfDoc.addPage();
             y = height - 60;
           }
-          // Group title = Category > Description
-          const catId = h.Category;
-          const cat   = cats.find(c=>c.id===catId);
-          const title = (cat?cat.Name:'No Category') + ' > ' + (h.Description||h.Name||`#${h.id}`);
+          // GROUP TITLE = Category > Description
+          const catObj = cats.find(c => c.id === h.Category);
+          const title  = (catObj?catObj.Name:'No Category')
+                        + ' > '
+                        + (h.Description||h.Name||'(no desc)');
           page.drawText(title, { x:left, y, font:ub, size:14 });
           y -= 20;
 
-          // Lines
+          let sum = 0;
           const lines = details.filter(d => {
             const ref = d[detailRef];
             const id  = Array.isArray(ref)?ref[1]:ref;
-            return id===h.id;
+            return id === h.id;
           });
-          let sum = 0;
           for (let d of lines) {
             if (y < 150) {
               page = pdfDoc.addPage();
               y = height - 60;
             }
-            page.drawText(d.Description||d.LineDescription||'', { x:left+20, y, font:uf, size:11 });
-            const val = d.Budget || d.Amount || 0;
+            page.drawText(d.Description||'', { x:left+20, y, font:uf, size:11 });
+            const val = d.Budget||d.Amount||0;
             const txt = formatCurrency(val);
             page.drawText(txt, {
               x: right - uf.widthOfTextAtSize(txt,11),
@@ -495,7 +503,6 @@
             y -= 16;
             sum += val;
           }
-          // Group total
           if (y < 150) {
             page = pdfDoc.addPage();
             y = height - 60;
@@ -511,8 +518,6 @@
           });
           y -= 24;
         }
-
-        // Section total
         if (y < 150) {
           page = pdfDoc.addPage();
           y = height - 60;
@@ -533,7 +538,6 @@
         });
       };
 
-      // Build requested sections
       if (!isRevenue || isCombined) {
         buildSection(allExpenses, allExpenseDetails, allExpenseCats, 'Expense', 'Expenses');
       }
@@ -541,7 +545,7 @@
         buildSection(allRevenues, allRevenueDetails, allRevenueCats, 'Revenue', 'Revenues');
       }
 
-      // Footer & page numbers
+      // —— Footer & page numbers —— 
       const pages = pdfDoc.getPages();
       const ts    = new Date().toLocaleString('el-GR');
       pages.forEach((pg,i) => {
@@ -555,7 +559,7 @@
         });
       });
 
-      // Save & download
+      // —— Save & download —— 
       const pdfBytes = await pdfDoc.save();
       const blob     = new Blob([pdfBytes], {type:'application/pdf'});
       const url      = URL.createObjectURL(blob);
