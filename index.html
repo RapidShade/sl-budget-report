@@ -797,7 +797,7 @@ async function generatePdf() {
   setTimeout(()=>{ if (currentRecord) renderHtmlReport(); }, 200);
 */
 
-  // === Initialization ===
+// === Initialization ===
 grist.ready({
   requiredAccess: 'full',
   columns:[
@@ -806,26 +806,21 @@ grist.ready({
   ]
 });
 
-// 1) Load all tables, then wire up the record handler
+// 1) Load all tables first
 fetchData().then(success => {
   if (success) {
-    // 2) Whenever a record is selected, update + render
+    // 2) Bind record‐change handler *after* data is loaded
     grist.onRecord(record => {
+      // Update state + re‐render preview
       onRecordUpdate(record);
       renderHtmlReport();
     });
-    // 3) If there’s already a record selected on first load, fire once
-    grist.docApi.fetchRecord().then(rec => {
-      if (rec) {
-        currentRecord = rec;
-        onRecordUpdate(rec);
-        renderHtmlReport();
-      }
-    });
+    // Note: grist.onRecord immediately fires for the already‐selected record,
+    // so you get your first render without any timeouts or hacks.
   }
 });
 
-// 4) Keep your other handlers intact
+// 3) Keep your report‐type switcher and download handlers untouched
 document.querySelectorAll('input[name=reportType]')
   .forEach(r => r.addEventListener('change', renderHtmlReport));
 
@@ -835,7 +830,8 @@ document.getElementById('downloadPdfButton')
 document.getElementById('downloadXlsxButton')
   .addEventListener('click', generateXlsx);
 
-// (Remove the old setTimeout render call)
+// (Removed the old setTimeout call and the fetchRecord attempt)
+
 
 </script>
 </body>
