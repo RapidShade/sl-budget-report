@@ -353,7 +353,7 @@
       // Create and append the balance bar
       const balDiv = document.createElement('div');
       balDiv.className = `grand-total ${cls}`;
-      balDiv.innerHTML = `<span>Balance</span><span>${formatCurrency(balance)}</span>`;
+      balDiv.innerHTML = `<span>Balance</span><span>${fmtCurr(balance)}</span>`;
       reportContainer.appendChild(balDiv);
     }
 
@@ -774,27 +774,34 @@ async function generatePdf() {
       );
     }
 
-    // Combined balance bar
-    if (rpt==='combined') {
-      if (y < 80) {
-        page = pdfDoc.addPage();
-        // === REPLACE manual reset with contentOffset ===
-        y = page.getSize().height - contentOffset;
-      }
-      const balTxt = `Balance: ${fmtCurr(totalR - totalE)}`;
+    // Combined balance bar with dynamic color
+    if (rpt === 'combined') {
+      if (y < 80) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
+    
+      const balance = totalR - totalE;
+      const balTxt   = `Balance: ${fmtCurr(balance)}`;
+    
+      // Choose bar color: dark blue if zero, green if positive, red if negative
+      let barColor = PDFLib.rgb(0.17, 0.24, 0.31);
+      if (balance > 0)  { barColor = PDFLib.rgb(0, 0.6, 0); }
+      if (balance < 0)  { barColor = PDFLib.rgb(1, 0, 0); }
+    
+      // Draw full-width bar
       page.drawRectangle({
         x: left,
         y: y - 4,
         width: right - left,
         height: 20,
-        color: PDFLib.rgb(0.17,0.24,0.31)
+        color: barColor
       });
+      // Draw white text on top
       page.drawText(balTxt, {
-        x: right - ub.widthOfTextAtSize(balTxt,14),
+        x: right - ub.widthOfTextAtSize(balTxt, 14),
         y, font: ub, size: 14, color: PDFLib.rgb(1,1,1)
       });
       y -= 30;
     }
+
 
     // Footer & pagination
     const pages = pdfDoc.getPages();
