@@ -466,45 +466,55 @@
           : await pdfDoc.embedPng(bytes);
       }
 
-      // Add header on each page (compute left inside to avoid scope issues)
-      function drawHeader(page) {
-        const { width, height } = page.getSize();
-        const left = 50;  // left margin inside header
-        let headerY = height - 20;
+// Draw the header on every page, with logo & centered title
+function drawHeader(page) {
+  const { width, height } = page.getSize();
+  const left = 50;
+  // How far down from the top the header block starts
+  const headerTopMargin = 20;
+  let headerY = height - headerTopMargin;
 
-        // If a logo is provided and positioned left:
-        if (logoImage && headerLogoPosition === 'left') {
-          page.drawImage(logoImage, {
-            x: left,
-            y: headerY - headerLogoHeight,
-            width: headerLogoWidth,
-            height: headerLogoHeight,
-          });
-          page.drawText(headerText, {
-            x: left + headerLogoWidth + 10,
-            y: headerY - (headerLogoHeight / 2) + (headerTextSize / 2),
-            font: ub,
-            size: headerTextSize,
-          });
+  if (logoImage) {
+    if (headerLogoPosition === 'left') {
+      // Draw logo on the left
+      page.drawImage(logoImage, {
+        x: left,
+        y: headerY - headerLogoHeight,
+        width: headerLogoWidth,
+        height: headerLogoHeight,
+      });
+      // Vertically center the text beside the logo
+      const logoMidY = headerY - (headerLogoHeight / 2);
+      const textY   = logoMidY - (headerTextSize / 2);
+      page.drawText(headerText, {
+        x: left + headerLogoWidth + 10,
+        y: textY,
+        font: ub,
+        size: headerTextSize,
+      });
 
-        // If a logo is provided and centered:
-        } else if (logoImage && headerLogoPosition === 'center') {
-          const x0 = (width - headerLogoWidth) / 2;
-          page.drawImage(logoImage, {
-            x: x0,
-            y: headerY - headerLogoHeight,
-            width: headerLogoWidth,
-            height: headerLogoHeight,
-          });
-          const txtW = ub.widthOfTextAtSize(headerText, headerTextSize);
-          page.drawText(headerText, {
-            x: (width - txtW) / 2,
-            y: headerY - headerLogoHeight - headerTextSize - 5,
-            font: ub,
-            size: headerTextSize,
-          });
-        }
-      }
+    } else if (headerLogoPosition === 'center') {
+      // Draw logo centered
+      const centerX = (width - headerLogoWidth) / 2;
+      page.drawImage(logoImage, {
+        x: centerX,
+        y: headerY - headerLogoHeight,
+        width: headerLogoWidth,
+        height: headerLogoHeight,
+      });
+      // Place text just below the logo, centered
+      const txtW = ub.widthOfTextAtSize(headerText, headerTextSize);
+      const textY = headerY - headerLogoHeight - headerTextSize - 5;
+      page.drawText(headerText, {
+        x: (width - txtW) / 2,
+        y: textY,
+        font: ub,
+        size: headerTextSize,
+      });
+    }
+  }
+}
+
 
 
       // Override addPage to include header
@@ -519,7 +529,12 @@
       let page = pdfDoc.addPage();
       const { width, height } = page.getSize();
       const left = 50, right = width - 50;
-      let y = height - 70;  // account for header
+      // RapidShade OLD: let y = height - 70;  // account for header
+
+      // Start the cursor below the header block (top‐margin + logo height + padding)
+      const headerTopMargin = 20;         // same as in drawHeader
+      let y = height - (headerTopMargin + headerLogoHeight + 20);
+      
 
       // Report title
       const rpt = document.querySelector('input[name=reportType]:checked').value;
