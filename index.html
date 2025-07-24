@@ -195,10 +195,12 @@
       allRevenues       = toRecs(rr);
       allRevenueDetails = toRecs(rd);
       allRevenueCats    = toRecs(rc);
+      return true;    // indicate success - RapidShade DEBUG - Race Condition fix 202507241547
     } catch (err) {
       console.error("Error fetching data:", err);
       document.getElementById('report-container').innerHTML =
         '<div class="error-message">Error fetching data. Check access.</div>';
+        return false;   // indicate failure - RapidShade DEBUG - Race Condition fix 202507241547
     }
   }
 
@@ -775,6 +777,8 @@ async function generatePdf() {
 }
 
   // === Initialization ===
+  // RapidShade : DEBUG - Changed to fix race condition of html render
+/*
   grist.ready({
     requiredAccess: 'full',
     columns:[
@@ -791,6 +795,48 @@ async function generatePdf() {
   document.getElementById('downloadXlsxButton')
     .addEventListener('click', generateXlsx);
   setTimeout(()=>{ if (currentRecord) renderHtmlReport(); }, 200);
+*/
+
+  // === Initialization ===
+grist.ready({
+  requiredAccess: 'full',
+  columns:[
+    'EventCode','Name','Sport','Discipline','DateStart','DateEnd',
+    'PERIF_CITY','CITY','VENUE','LEVEL','POOL_SIZE','Organiser'
+  ]
+});
+
+// 1) Load all tables, then wire up the record handler
+fetchData().then(success => {
+  if (success) {
+    // 2) Whenever a record is selected, update + render
+    grist.onRecord(record => {
+      onRecordUpdate(record);
+      renderHtmlReport();
+    });
+    // 3) If there’s already a record selected on first load, fire once
+    grist.docApi.fetchRecord().then(rec => {
+      if (rec) {
+        currentRecord = rec;
+        onRecordUpdate(rec);
+        renderHtmlReport();
+      }
+    });
+  }
+});
+
+// 4) Keep your other handlers intact
+document.querySelectorAll('input[name=reportType]')
+  .forEach(r => r.addEventListener('change', renderHtmlReport));
+
+document.getElementById('downloadPdfButton')
+  .addEventListener('click', generatePdf);
+
+document.getElementById('downloadXlsxButton')
+  .addEventListener('click', generateXlsx);
+
+// (Remove the old setTimeout render call)
+
 </script>
 </body>
 </html>
