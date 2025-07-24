@@ -88,6 +88,19 @@
       background:#2c3e50; color:white;
       font-weight:bold; font-size:1.2em; border-radius:4px;
     }
+    /* Balance bar colors for combined report - RapidShade - 202504271612 */
+    .balance-zero {
+      background-color: #2c3e50; /* same dark blue as grand total */
+      color: white;
+    }
+    .balance-positive {
+      background-color: #4CAF50; /* green */
+      color: white;
+    }
+    .balance-negative {
+      background-color: #E74C3C; /* red */
+      color: white;
+    }
     .expense-item:last-child, .revenue-item:last-child { border-bottom:none; }
   </style>
 
@@ -297,6 +310,54 @@
                    'Revenue');
     }
 
+
+    // ─── Combined Balance for HTML preview - RapidShade - ADDED BALANCE to HMTL also - 202507241613 ───
+    if (rpt === 'combined') {
+      // Calculate totals (you already have these in buildGroups, but recompute here)
+      const totalExpenses = allExpenses
+        .filter(h => {
+          const r = h.Event;
+          return Array.isArray(r) ? r[1]===currentRecord.id : r===currentRecord.id;
+        })
+        .reduce((sum, h) => {
+          return sum + allExpenseDetails
+            .filter(d => {
+              const ref = d.Expense;
+              return Array.isArray(ref)? ref[1]===h.id : ref===h.id;
+            })
+            .reduce((s, d) => s + (d.Actual || d.Budget || 0), 0);
+        }, 0);
+
+      const totalRevenues = allRevenues
+        .filter(h => {
+          const r = h.Event;
+          return Array.isArray(r) ? r[1]===currentRecord.id : r===currentRecord.id;
+        })
+        .reduce((sum, h) => {
+          return sum + allRevenueDetails
+            .filter(d => {
+              const ref = d.Revenue;
+              return Array.isArray(ref)? ref[1]===h.id : ref===h.id;
+            })
+            .reduce((s, d) => s + (d.Actual || d.Budget || 0), 0);
+        }, 0);
+
+      const balance = totalRevenues - totalExpenses;
+      // Choose CSS class based on sign
+      const cls = balance > 0
+        ? 'balance-positive'
+        : balance < 0
+          ? 'balance-negative'
+          : 'balance-zero';
+
+      // Create and append the balance bar
+      const balDiv = document.createElement('div');
+      balDiv.className = `grand-total ${cls}`;
+      balDiv.innerHTML = `<span>Balance</span><span>${formatCurrency(balance)}</span>`;
+      reportContainer.appendChild(balDiv);
+    }
+
+    
     // --- No-data placeholder ---
     if ((rpt === 'expenses' && !allExpenses.length) ||
         (rpt === 'revenues' && !allRevenues.length) ||
