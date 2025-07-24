@@ -466,40 +466,46 @@
           : await pdfDoc.embedPng(bytes);
       }
 
-      // Add header on each page
+      // Add header on each page (compute left inside to avoid scope issues)
       function drawHeader(page) {
         const { width, height } = page.getSize();
+        const left = 50;  // left margin inside header
         let headerY = height - 20;
+
+        // If a logo is provided and positioned left:
         if (logoImage && headerLogoPosition === 'left') {
           page.drawImage(logoImage, {
             x: left,
             y: headerY - headerLogoHeight,
             width: headerLogoWidth,
-            height: headerLogoHeight
+            height: headerLogoHeight,
           });
           page.drawText(headerText, {
             x: left + headerLogoWidth + 10,
             y: headerY - (headerLogoHeight / 2) + (headerTextSize / 2),
             font: ub,
-            size: headerTextSize
+            size: headerTextSize,
           });
+
+        // If a logo is provided and centered:
         } else if (logoImage && headerLogoPosition === 'center') {
-          const centerX = (width - headerLogoWidth) / 2;
+          const x0 = (width - headerLogoWidth) / 2;
           page.drawImage(logoImage, {
-            x: centerX,
+            x: x0,
             y: headerY - headerLogoHeight,
             width: headerLogoWidth,
-            height: headerLogoHeight
+            height: headerLogoHeight,
           });
-          const textW = ub.widthOfTextAtSize(headerText, headerTextSize);
+          const txtW = ub.widthOfTextAtSize(headerText, headerTextSize);
           page.drawText(headerText, {
-            x: (width - textW) / 2,
+            x: (width - txtW) / 2,
             y: headerY - headerLogoHeight - headerTextSize - 5,
             font: ub,
-            size: headerTextSize
+            size: headerTextSize,
           });
         }
       }
+
 
       // Override addPage to include header
       const origAddPage = pdfDoc.addPage;
