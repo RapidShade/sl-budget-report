@@ -326,6 +326,9 @@
         groupDiv.className = refField.toLowerCase() + '-group';
         groupDiv.innerHTML = `<h3>${headerText}</h3>`;
 
+        // RapidShade DEBUG: to be commented out
+        console.log("RapidShade DEBUG: Revenue detail record keys:", Object.keys(details[0]), details[0]);
+        
         // Render detail lines
         let groupSum = 0;
         details
@@ -334,10 +337,6 @@
             const id = Array.isArray(r) ? r[1] : r;
             return id === h.id;
           })
-
-          // RapidShade DEBUG: to be commented out
-          console.log("Revenue detail record keys:", Object.keys(details[0]), details[0]);
-
           .forEach(d => {
             const value = d.Budget || d.Amount || 0;
             groupSum += value;
