@@ -328,8 +328,8 @@
         groupDiv.className = refField.toLowerCase() + '-group';
         groupDiv.innerHTML = `<h3>${headerText}</h3>`;
 
-        // RapidShade DEBUG: to be commented out
-        console.log("RapidShade DEBUG: Revenue detail record keys:", Object.keys(details[0]), details[0]);
+//        // RapidShade DEBUG: to be commented out
+//        console.log("RapidShade DEBUG: Revenue detail record keys:", Object.keys(details[0]), details[0]);
         
         // Render detail lines
         let groupSum = 0;
@@ -809,18 +809,22 @@ grist.ready({
 // 1) Load all tables first
 fetchData().then(success => {
   if (success) {
-    // 2) Bind record‐change handler *after* data is loaded
+    // 2) Bind record‐change handler
     grist.onRecord(record => {
-      // Update state + re‐render preview
       onRecordUpdate(record);
       renderHtmlReport();
     });
-    // Note: grist.onRecord immediately fires for the already‐selected record,
-    // so you get your first render without any timeouts or hacks.
+    // 3) ALSO fetch the current selected record once, to trigger the very first render
+    grist.view.fetchSelectedRecord().then(record => {
+      if (record) {
+        onRecordUpdate(record);
+        renderHtmlReport();
+      }
+    });
   }
 });
 
-// 3) Keep your report‐type switcher and download handlers untouched
+// 4) Keep your report‐type switcher and download handlers untouched
 document.querySelectorAll('input[name=reportType]')
   .forEach(r => r.addEventListener('change', renderHtmlReport));
 
@@ -830,7 +834,6 @@ document.getElementById('downloadPdfButton')
 document.getElementById('downloadXlsxButton')
   .addEventListener('click', generateXlsx);
 
-// (Removed the old setTimeout call and the fetchRecord attempt)
 
 
 </script>
