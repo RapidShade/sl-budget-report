@@ -806,25 +806,22 @@ grist.ready({
   ]
 });
 
-// 1) Load all tables first
+// 1) Bind the onRecord handler immediately (it may fire now, or once the user actually clicks)
+grist.onRecord(record => {
+  onRecordUpdate(record);
+  renderHtmlReport();
+});
+
+// 2) Load all tables; once data is in, *re*-call onRecordUpdate for the currentRecord
 fetchData().then(success => {
-  if (success) {
-    // 2) Bind record‐change handler
-    grist.onRecord(record => {
-      onRecordUpdate(record);
-      renderHtmlReport();
-    });
-    // 3) ALSO fetch the current selected record once, to trigger the very first render
-    grist.view.fetchSelectedRecord().then(record => {
-      if (record) {
-        onRecordUpdate(record);
-        renderHtmlReport();
-      }
-    });
+  if (success && currentRecord) {
+    // Re-render now that allExpenseDetails/allRevenueDetails are populated
+    onRecordUpdate(currentRecord);
+    renderHtmlReport();
   }
 });
 
-// 4) Keep your report‐type switcher and download handlers untouched
+// 3) Keep your radio‐button switch and download handlers exactly as they were
 document.querySelectorAll('input[name=reportType]')
   .forEach(r => r.addEventListener('change', renderHtmlReport));
 
@@ -834,6 +831,7 @@ document.getElementById('downloadPdfButton')
 document.getElementById('downloadXlsxButton')
   .addEventListener('click', generateXlsx);
 
+// (Removed any fetchSelectedRecord or setTimeout hacks)
 
 
 </script>
