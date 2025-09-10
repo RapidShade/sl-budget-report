@@ -71,10 +71,27 @@
       background:#e9ecef; padding:10px; border-radius:4px;
       color:#495057; margin:0 0 10px 0;
     }
-    .expense-item, .revenue-item, .group-summary {
-      /* Lines */
-      display:flex; justify-content:space-between;
-      padding:8px 10px; border-bottom:1px solid #dee2e6;
+    /* Updated grid for 4 columns: Description, Budget, Actual, Variance */
+    .report-header, .expense-item, .revenue-item, .group-summary, .grand-total {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr 1fr;
+        gap: 10px;
+        align-items: center;
+        padding: 8px 10px;
+    }
+    .report-header {
+        font-weight: bold;
+        border-bottom: 2px solid #495057;
+    }
+    .expense-item, .revenue-item {
+        border-bottom: 1px solid #dee2e6;
+    }
+    .report-header span:not(:first-child),
+    .expense-item span:not(:first-child),
+    .revenue-item span:not(:first-child),
+    .group-summary span:not(:first-child),
+    .grand-total span:not(:first-child) {
+        text-align: right;
     }
     .group-summary {
       /* Subtotal */
@@ -83,8 +100,7 @@
     }
     .grand-total {
       /* Footer total */
-      display:flex; justify-content:space-between;
-      padding:12px 10px; margin-top:20px;
+      margin-top:20px;
       background:#2c3e50; color:white;
       font-weight:bold; font-size:1.2em; border-radius:4px;
     }
@@ -130,7 +146,7 @@
   </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v8.20 ▶️ Full-width bars & comments");
+  console.log("RapidShade: [WIDGET] v8.21 ▶️ Budget, Actual, Variance implemented");
 
   // === Configuration Constants ===
   // Logo URL (embed in header)
@@ -266,7 +282,7 @@
     // Add sub-heading
     container.appendChild(
       Object.assign(document.createElement('h3'),
-                    { textContent: mainTitle })
+                    { textContent: mainTitle, style: "text-align: center;" })
     );
 
     // --- Event Details ---
@@ -352,7 +368,9 @@
 
       // Create and append the balance bar
       const balDiv = document.createElement('div');
+      // This is a special single-line display, so it doesn't use the 4-column grid
       balDiv.className = `grand-total ${cls}`;
+      balDiv.style.gridTemplateColumns = '1fr 1fr'; // Override to 2 columns
       balDiv.innerHTML = `<span>Balance</span><span>${fmtCurr(balance)}</span>`;
       container.appendChild(balDiv);
     }
@@ -371,10 +389,21 @@
 
   /**
    * Helper to render each group and its details in the HTML preview.
-   * Sub-group totals remain plain (no dark bar).
+   * Now includes Budget, Actual, and Variance columns.
    */
   function renderGroups(container, headers, details, cats, refField) {
-    let grandTotal = 0;
+    let grandTotal = { budget: 0, actual: 0, variance: 0 };
+
+    // Add a header row for the columns before listing groups
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'report-header';
+    headerDiv.innerHTML = `
+        <span>Description</span>
+        <span>Budget</span>
+        <span>Actual</span>
+        <span>Variance</span>
+    `;
+    container.appendChild(headerDiv);
 
     headers
       .filter(h => {
@@ -389,11 +418,7 @@
         groupDiv.className = refField.toLowerCase() + '-group';
         groupDiv.innerHTML = `<h3>${headerText}</h3>`;
 
-//        // RapidShade DEBUG: to be commented out
-//        console.log("RapidShade DEBUG: Revenue detail record keys:", Object.keys(details[0]), details[0]);
-        
-        // Render detail lines
-        let groupSum = 0;
+        let groupSum = { budget: 0, actual: 0, variance: 0 };
         details
           .filter(d => {
             const r = d[refField];
@@ -401,33 +426,50 @@
             return id === h.id;
           })
           .forEach(d => {
-            const value = d.Budget || d.Amount || 0;
-            groupSum += value;
+            const budget = d.Budget || 0;
+            const actual = d.Actual || 0;
+            const variance = budget - actual;
+            groupSum.budget += budget;
+            groupSum.actual += actual;
+            groupSum.variance += variance;
+
             const lineDiv = document.createElement('div');
             lineDiv.className = refField.toLowerCase() + '-item';
-            lineDiv.innerHTML =
-              `<span>${d.Description || ''}</span>` +
-              `<span>${fmtCurr(value)}</span>`;
+            lineDiv.innerHTML = `
+                <span>${d.Description || ''}</span>
+                <span>${fmtCurr(budget)}</span>
+                <span>${fmtCurr(actual)}</span>
+                <span>${fmtCurr(variance)}</span>
+            `;
             groupDiv.appendChild(lineDiv);
           });
 
-        // Plain sub-group total
+        // Group summary row for all columns
         const summaryDiv = document.createElement('div');
         summaryDiv.className = 'group-summary';
-        summaryDiv.innerHTML =
-          `<span>Group Total</span><span>${fmtCurr(groupSum)}</span>`;
+        summaryDiv.innerHTML = `
+            <span>Group Total</span>
+            <span>${fmtCurr(groupSum.budget)}</span>
+            <span>${fmtCurr(groupSum.actual)}</span>
+            <span>${fmtCurr(groupSum.variance)}</span>
+        `;
         groupDiv.appendChild(summaryDiv);
 
         container.appendChild(groupDiv);
-        grandTotal += groupSum;
+        grandTotal.budget += groupSum.budget;
+        grandTotal.actual += groupSum.actual;
+        grandTotal.variance += groupSum.variance;
       });
 
     // HTML preview section grand total
     const gtDiv = document.createElement('div');
     gtDiv.className = 'grand-total';
-    gtDiv.innerHTML =
-      `<span>GRAND TOTAL ${refField.toUpperCase()}</span>` +
-      `<span>${fmtCurr(grandTotal)}</span>`;
+    gtDiv.innerHTML = `
+        <span>GRAND TOTAL ${refField.toUpperCase()}</span>
+        <span>${fmtCurr(grandTotal.budget)}</span>
+        <span>${fmtCurr(grandTotal.actual)}</span>
+        <span>${fmtCurr(grandTotal.variance)}</span>
+    `;
     container.appendChild(gtDiv);
   }
 
@@ -471,9 +513,9 @@
             })
             .forEach(d => {
               const budget   = d.Budget   || 0;
-        const actual   = d.Actual   || 0;
-        const variance = budget - actual;
-        data.push([catName, d.Description||'', budget, actual, variance]);
+              const actual   = d.Actual   || 0;
+              const variance = budget - actual;
+              data.push([catName, d.Description||'', budget, actual, variance]);
             });
         });
       const ws = XLSX.utils.aoa_to_sheet(data);
@@ -511,19 +553,21 @@ async function generatePdf() {
     // Text wrapper helper
     function drawWrapped(page, text, x, y0, maxW, font, size, lh) {
       const words = text.split(' ');
-      let line = '', y = y0;
+      let line = '', y = y0, lines = 0;
       for (let w of words) {
         const test = line + w + ' ';
         if (font.widthOfTextAtSize(test, size) > maxW && line) {
           page.drawText(line, { x, y, font, size });
           y -= lh;
+          lines++;
           line = w + ' ';
         } else {
           line = test;
         }
       }
       page.drawText(line, { x, y, font, size });
-      return y - lh;
+      lines++;
+      return { nextY: y - lh, linesUsed: lines };
     }
 
     // Embed logo image if provided
@@ -623,7 +667,7 @@ async function generatePdf() {
       left, y,
       right - left,
       uf, 11, 13
-    );
+    ).nextY;
     y -= 10;
 
     const fieldsArr = [
@@ -651,8 +695,13 @@ async function generatePdf() {
           ? r[1] === currentRecord.id
           : r === currentRecord.id;
       });
-      if (!recs.length) return 0;
+      if (!recs.length) return { budget: 0, actual: 0, variance: 0, effective: 0 };
 
+      if (y < 150) {
+        page = pdfDoc.addPage();
+        y = page.getSize().height - contentOffset;
+      }
+      
       if (rpt === 'combined' && key === 'revenues') {
         page = pdfDoc.addPage();
         // === REPLACE manual reset with contentOffset ===
@@ -661,109 +710,122 @@ async function generatePdf() {
 
       // Section header bar
       page.drawRectangle({
-        x: left,
-        y: y - 4,
-        width: right - left,
-        height: 20,
+        x: left, y: y - 4, width: right - left, height: 20,
         color: PDFLib.rgb(0.9, 0.9, 0.9)
       });
-      page.drawText(SECTION_HEADERS[key], { x: left, y, font: ub, size: 16 });
+      page.drawText(SECTION_HEADERS[key], { x: left + 5, y, font: ub, size: 16 });
       y -= 28;
+      
+      // Column positions
+      const descX = left + 5;
+      const budgetX = right - 210;
+      const actualX = right - 110;
+      const varianceX = right - 10;
+      
+      // Column headers
+      page.drawText('Description', { x: descX, y, font: ub, size: 11 });
+      page.drawText('Budget', { x: budgetX, y, font: ub, size: 11 });
+      page.drawText('Actual', { x: actualX, y, font: ub, size: 11 });
+      page.drawText('Variance', { x: varianceX, y, font: ub, size: 11 });
+      y -= 20;
 
-      let secSum = 0;
+      let secSum = { budget: 0, actual: 0, variance: 0, effective: 0 };
       for (let h of recs) {
         if (y < 120) {
           page = pdfDoc.addPage();
-          // === REPLACE manual reset with contentOffset ===
           y = page.getSize().height - contentOffset;
         }
         // Group header bar
         page.drawRectangle({
-          x: left,
-          y: y - 4,
-          width: right - left,
-          height: 20,
+          x: left, y: y - 4, width: right - left, height: 20,
           color: PDFLib.rgb(0.95, 0.95, 0.95)
         });
         const cat = cats.find(c => c.id === h.Category);
         const hdrTxt = (cat ? cat.Name : 'No Category') +
                        (h.Description ? ` > ${h.Description}` : '');
-        page.drawText(hdrTxt, { x: left, y, font: ub, size: 14 });
+        page.drawText(hdrTxt, { x: left + 5, y, font: ub, size: 14 });
         y -= 24;
 
-        let groupSum = 0;
+        let groupSum = { budget: 0, actual: 0, variance: 0 };
         details.filter(d => {
           const r = d[refField];
-          return Array.isArray(r)
-            ? r[1] === h.id
-            : r === h.id;
+          return Array.isArray(r) ? r[1] === h.id : r === h.id;
         }).forEach(d => {
           if (y < 60) {
             page = pdfDoc.addPage();
-            // === REPLACE manual reset with contentOffset ===
             y = page.getSize().height - contentOffset;
           }
-          page.drawText(d.Description || '', { x: left+20, y, font: uf, size: 11 });
-          const val = d.Budget || d.Amount || 0;
-          const txt = fmtCurr(val);
-          page.drawText(txt, {
-            x: right - uf.widthOfTextAtSize(txt,11),
-            y, font: uf, size: 11
-          });
+          
+          const budget = d.Budget || 0;
+          const actual = d.Actual || 0;
+          const variance = budget - actual;
+          const budgetTxt = fmtCurr(budget);
+          const actualTxt = fmtCurr(actual);
+          const varianceTxt = fmtCurr(variance);
+          
+          const descMaxW = budgetX - descX - 10;
+          const wrapResult = drawWrapped(page, d.Description || '', descX, y, descMaxW, uf, 11, 13);
+          
+          // Draw numbers aligned with the first line of the description
+          page.drawText(budgetTxt, { x: budgetX + 60 - uf.widthOfTextAtSize(budgetTxt, 11), y, font: uf, size: 11 });
+          page.drawText(actualTxt, { x: actualX + 60 - uf.widthOfTextAtSize(actualTxt, 11), y, font: uf, size: 11 });
+          page.drawText(varianceTxt, { x: varianceX + 60 - uf.widthOfTextAtSize(varianceTxt, 11), y, font: uf, size: 11 });
+          y = wrapResult.nextY + 13 - (13 * wrapResult.linesUsed); // Adjust y based on lines used
+          
           if (enablePdfDetailLines) {
             page.drawLine({
-              start: { x: left+20, y: y-2 },
-              end:   { x: right,    y: y-2 },
-              thickness: pdfDetailLineWidth,
-              color: pdfDetailLineColor
+              start: { x: left, y: y - 2 }, end:   { x: right, y: y-2 },
+              thickness: pdfDetailLineWidth, color: pdfDetailLineColor
             });
           }
           y -= 18;
-          groupSum += val;
+          groupSum.budget += budget;
+          groupSum.actual += actual;
+          groupSum.variance += variance;
+          secSum.effective += (d.Actual || d.Budget || 0);
         });
 
         // Plain sub-group total
         if (y < 60) {
           page = pdfDoc.addPage();
-          // === REPLACE manual reset with contentOffset ===
           y = page.getSize().height - contentOffset;
         }
-        const gsTxt = fmtCurr(groupSum);
-        page.drawText('Group Total:', {
-          x: right - 80 - ub.widthOfTextAtSize(gsTxt,12),
-          y, font: ub, size: 12
-        });
-        page.drawText(gsTxt, {
-          x: right - ub.widthOfTextAtSize(gsTxt,12),
-          y, font: ub, size: 12
-        });
+        page.drawText('Group Total:', { x: budgetX - 60, y, font: ub, size: 12 });
+        const gsBudgetTxt = fmtCurr(groupSum.budget);
+        page.drawText(gsBudgetTxt, { x: budgetX + 60 - ub.widthOfTextAtSize(gsBudgetTxt, 12), y, font: ub, size: 12 });
+        const gsActualTxt = fmtCurr(groupSum.actual);
+        page.drawText(gsActualTxt, { x: actualX + 60 - ub.widthOfTextAtSize(gsActualTxt, 12), y, font: ub, size: 12 });
+        const gsVarianceTxt = fmtCurr(groupSum.variance);
+        page.drawText(gsVarianceTxt, { x: varianceX + 60 - ub.widthOfTextAtSize(gsVarianceTxt, 12), y, font: ub, size: 12 });
+
         y -= 28;
-        secSum += groupSum;
+        secSum.budget += groupSum.budget;
+        secSum.actual += groupSum.actual;
+        secSum.variance += groupSum.variance;
       }
 
       // SECTION TOTAL: full-width dark bar
       if (y < 80) {
         page = pdfDoc.addPage();
-        // === REPLACE manual reset with contentOffset ===
         y = page.getSize().height - contentOffset;
       }
-      const secTxt = `TOTAL ${key.toUpperCase()}: ${fmtCurr(secSum)}`;
       page.drawRectangle({
-        x: left,
-        y: y - 4,
-        width: right - left,
-        height: 20,
+        x: left, y: y - 4, width: right - left, height: 20,
         color: PDFLib.rgb(0.17, 0.24, 0.31)
       });
-      page.drawText(secTxt, {
-        x: right - ub.widthOfTextAtSize(secTxt,14),
-        y, font: ub, size: 14, color: PDFLib.rgb(1,1,1)
-      });
+      const secTitleTxt = `TOTAL ${key.toUpperCase()}`;
+      page.drawText(secTitleTxt, { x: left + 5, y, font: ub, size: 14, color: PDFLib.rgb(1,1,1) });
+      const secBudgetTxt = fmtCurr(secSum.budget);
+      page.drawText(secBudgetTxt, { x: budgetX + 60 - ub.widthOfTextAtSize(secBudgetTxt, 14), y, font: ub, size: 14, color: PDFLib.rgb(1,1,1) });
+      const secActualTxt = fmtCurr(secSum.actual);
+      page.drawText(secActualTxt, { x: actualX + 60 - ub.widthOfTextAtSize(secActualTxt, 14), y, font: ub, size: 14, color: PDFLib.rgb(1,1,1) });
+      const secVarianceTxt = fmtCurr(secSum.variance);
+      page.drawText(secVarianceTxt, { x: varianceX + 60 - ub.widthOfTextAtSize(secVarianceTxt, 14), y, font: ub, size: 14, color: PDFLib.rgb(1,1,1) });
       y -= 30;
       return secSum;
     }
 
-    let totalE = 0, totalR = 0;
+    let totalE = { effective: 0 }, totalR = { effective: 0 };
     if (rpt==='expenses'||rpt==='combined') {
       totalE = await buildSection(
         allExpenses, allExpenseDetails, allExpenseCats,
@@ -781,7 +843,7 @@ async function generatePdf() {
     if (rpt === 'combined') {
       if (y < 80) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
     
-      const balance = totalR - totalE;
+      const balance = totalR.effective - totalE.effective;
       const balTxt   = `Balance: ${fmtCurr(balance)}`;
     
       // Choose bar color: dark blue if zero, green if positive, red if negative
@@ -791,10 +853,7 @@ async function generatePdf() {
     
       // Draw full-width bar
       page.drawRectangle({
-        x: left,
-        y: y - 4,
-        width: right - left,
-        height: 20,
+        x: left, y: y - 4, width: right - left, height: 20,
         color: barColor
       });
       // Draw white text on top
@@ -908,4 +967,3 @@ document.getElementById('downloadXlsxButton')
 </script>
 </body>
 </html>
-
