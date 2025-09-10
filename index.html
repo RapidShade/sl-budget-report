@@ -146,7 +146,7 @@
   </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v8.21 ▶️ Budget, Actual, Variance implemented");
+  console.log("RapidShade: [WIDGET] v8.22 ▶️ PDF layout fixes");
 
   // === Configuration Constants ===
   // Logo URL (embed in header)
@@ -788,9 +788,10 @@ async function generatePdf() {
         // Plain sub-group total
         if (y < 60) {
           page = pdfDoc.addPage();
+          // === REPLACE manual reset with contentOffset ===
           y = page.getSize().height - contentOffset;
         }
-        page.drawText('Group Total:', { x: budgetX - 60, y, font: ub, size: 12 });
+        page.drawText('Group Total:', { x: left + 5, y, font: ub, size: 12 });
         const gsBudgetTxt = fmtCurr(groupSum.budget);
         page.drawText(gsBudgetTxt, { x: budgetX + 60 - ub.widthOfTextAtSize(gsBudgetTxt, 12), y, font: ub, size: 12 });
         const gsActualTxt = fmtCurr(groupSum.actual);
@@ -825,7 +826,8 @@ async function generatePdf() {
       return secSum;
     }
 
-    let totalE = { effective: 0 }, totalR = { effective: 0 };
+    let totalE = { budget: 0, actual: 0, variance: 0, effective: 0 };
+    let totalR = { budget: 0, actual: 0, variance: 0, effective: 0 };
     if (rpt==='expenses'||rpt==='combined') {
       totalE = await buildSection(
         allExpenses, allExpenseDetails, allExpenseCats,
@@ -843,24 +845,39 @@ async function generatePdf() {
     if (rpt === 'combined') {
       if (y < 80) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
     
-      const balance = totalR.effective - totalE.effective;
-      const balTxt   = `Balance: ${fmtCurr(balance)}`;
+      // Calculate balance for all three columns
+      const balanceBudget = totalR.budget - totalE.budget;
+      const balanceActual = totalR.actual - totalE.actual;
+      const balanceVariance = totalR.variance - totalE.variance;
+
+      const balBudgetTxt = fmtCurr(balanceBudget);
+      const balActualTxt = fmtCurr(balanceActual);
+      const balVarianceTxt = fmtCurr(balanceVariance);
     
-      // Choose bar color: dark blue if zero, green if positive, red if negative
-      let barColor = PDFLib.rgb(0.17, 0.24, 0.31);
-      if (balance > 0)  { barColor = PDFLib.rgb(0, 0.6, 0); }
-      if (balance < 0)  { barColor = PDFLib.rgb(1, 0, 0); }
+      // Choose bar color based on the actual balance
+      let barColor = PDFLib.rgb(0.17, 0.24, 0.31); // dark blue for zero
+      if (balanceActual > 0)  { barColor = PDFLib.rgb(0, 0.6, 0); } // green for positive
+      if (balanceActual < 0)  { barColor = PDFLib.rgb(1, 0, 0); } // red for negative
     
       // Draw full-width bar
       page.drawRectangle({
         x: left, y: y - 4, width: right - left, height: 20,
         color: barColor
       });
-      // Draw white text on top
-      page.drawText(balTxt, {
-        x: right - ub.widthOfTextAtSize(balTxt, 14),
-        y, font: ub, size: 14, color: PDFLib.rgb(1,1,1)
-      });
+
+      // Draw white text on top, aligned with columns
+      const textColor = PDFLib.rgb(1, 1, 1);
+      page.drawText('Balance', { x: left + 5, y, font: ub, size: 14, color: textColor });
+
+      // Use the same column positions as the section totals
+      const budgetX = right - 210;
+      const actualX = right - 110;
+      const varianceX = right - 10;
+      
+      page.drawText(balBudgetTxt, { x: budgetX + 60 - ub.widthOfTextAtSize(balBudgetTxt, 14), y, font: ub, size: 14, color: textColor });
+      page.drawText(balActualTxt, { x: actualX + 60 - ub.widthOfTextAtSize(balActualTxt, 14), y, font: ub, size: 14, color: textColor });
+      page.drawText(balVarianceTxt, { x: varianceX + 60 - ub.widthOfTextAtSize(balVarianceTxt, 14), y, font: ub, size: 14, color: textColor });
+      
       y -= 30;
     }
 
@@ -967,3 +984,4 @@ document.getElementById('downloadXlsxButton')
 </script>
 </body>
 </html>
+
