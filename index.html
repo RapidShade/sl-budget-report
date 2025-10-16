@@ -172,7 +172,7 @@
   </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v9.5 ▶️ Final PDF layout and alignment fixes");
+  console.log("RapidShade: [WIDGET] v9.6 ▶️ Final PDF vertical spacing adjustments");
 
   // === Configuration Constants ===
   // Logo URL (embed in header)
@@ -714,7 +714,7 @@ async function generatePdf() {
       page.drawText(SECTION_HEADERS[key], { x: left + 5, y, font: ub, size: 16 });
       y -= 28;
       
-      const numberColWidth = 90; // Increased width for number columns
+      const numberColWidth = 90; 
       const textPadding = 5; 
       const varianceX = right - numberColWidth;
       const actualX = varianceX - numberColWidth;
@@ -776,11 +776,12 @@ async function generatePdf() {
         });
 
         if (y < 60) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
+        y -= 4; // Reduce gap before group total line
         page.drawText('Group Total:', { x: descX + 5, y, font: ub, size: 12 });
         drawRightAlignedText(fmtCurr(groupSum.budget), budgetX, numberColWidth, ub, 12);
         drawRightAlignedText(fmtCurr(groupSum.actual), actualX, numberColWidth, ub, 12);
         drawRightAlignedText(fmtCurr(groupSum.variance), varianceX, numberColWidth, ub, 12);
-        y -= 28;
+        y -= 24; // Adjusted gap after group total
 
         reportSummaryData.push({ type: 'group', section: key, name: hdrTxt, ...groupSum });
         secSum.budget += groupSum.budget;
@@ -829,7 +830,7 @@ async function generatePdf() {
     
       const getColorForValue = (value) => value > 0 ? PDFLib.rgb(0.17, 0.53, 0.23) : value < 0 ? PDFLib.rgb(0.8, 0.2, 0.2) : PDFLib.rgb(0.17, 0.24, 0.31);
 
-      const numberColWidth = 90; // Increased width for number columns
+      const numberColWidth = 90; 
       const textPadding = 5; 
       const varianceX = right - numberColWidth;
       const actualX = varianceX - numberColWidth;
@@ -908,8 +909,8 @@ async function generatePdf() {
 
         for (const item of reportSummaryData) {
             if (y < 60) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
-            const font = item.type !== 'group' ? ub : uf;
-            const size = item.type !== 'group' ? 12 : 11;
+            const font = item.type !== 'group' ? uf : ub; // Swapped font for emphasis
+            const size = item.type !== 'group' ? 11 : 12;
             const isTotalOrBalance = item.type === 'sectionTotal' || item.type === 'balance';
             
             if(isTotalOrBalance) {
@@ -917,7 +918,7 @@ async function generatePdf() {
               const thickness = item.type === 'balance' ? 1.5 : 0.5;
               const color = item.type === 'balance' ? PDFLib.rgb(0,0,0) : PDFLib.rgb(0.5,0.5,0.5);
               page.drawLine({ start: { x: left, y: y }, end: { x: right, y: y }, thickness, color});
-              y -= (size + 5); // Add space AFTER the line, before the text is drawn
+              y -= (size + 8); // **FIX**: Increased space AFTER the line, before drawing text.
             }
 
             page.drawText(item.name, { x: descX + 5, y, font, size });
@@ -925,9 +926,8 @@ async function generatePdf() {
             drawRightAlignedText(fmtCurr(item.actual), actualX, numberColWidth, font, size);
             drawRightAlignedText(fmtCurr(item.variance), varianceX, numberColWidth, font, size);
 
-            if (!isTotalOrBalance) {
-                y -= (size + 8); // Standard space after a normal row
-            }
+            // Decrement y for the next line's position
+            y -= (size + (isTotalOrBalance ? 8 : 6)); 
         }
     }
 
