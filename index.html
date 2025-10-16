@@ -172,7 +172,7 @@
   </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v9.6 ▶️ Final PDF vertical spacing adjustments");
+  console.log("RapidShade: [WIDGET] v9.7 ▶️ Final PDF hierarchy and spacing polish");
 
   // === Configuration Constants ===
   // Logo URL (embed in header)
@@ -253,12 +253,12 @@
       allRevenues       = toRecs(rr);
       allRevenueDetails = toRecs(rd);
       allRevenueCats    = toRecs(rc);
-      return true;    // indicate success - RapidShade DEBUG - Race Condition fix 202507241547
+      return true;    // indicate success
     } catch (err) {
       console.error("Error fetching data:", err);
       document.getElementById('report-container').innerHTML =
         '<div class="error-message">Error fetching data. Check access.</div>';
-        return false;   // indicate failure - RapidShade DEBUG - Race Condition fix 202507241547
+        return false;   // indicate failure
     }
   }
 
@@ -776,7 +776,7 @@ async function generatePdf() {
         });
 
         if (y < 60) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
-        y -= 4; // Reduce gap before group total line
+        // y -= 4; // **REMOVED**: This was creating too much space before the group total.
         page.drawText('Group Total:', { x: descX + 5, y, font: ub, size: 12 });
         drawRightAlignedText(fmtCurr(groupSum.budget), budgetX, numberColWidth, ub, 12);
         drawRightAlignedText(fmtCurr(groupSum.actual), actualX, numberColWidth, ub, 12);
@@ -909,25 +909,24 @@ async function generatePdf() {
 
         for (const item of reportSummaryData) {
             if (y < 60) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
-            const font = item.type !== 'group' ? uf : ub; // Swapped font for emphasis
-            const size = item.type !== 'group' ? 11 : 12;
             const isTotalOrBalance = item.type === 'sectionTotal' || item.type === 'balance';
+            const font = isTotalOrBalance ? ub : uf; // Corrected: Totals are bold, groups are regular.
+            const size = isTotalOrBalance ? 12 : 11; // Corrected: Totals are larger.
             
             if(isTotalOrBalance) {
               y -= 10; // Space above the line
               const thickness = item.type === 'balance' ? 1.5 : 0.5;
               const color = item.type === 'balance' ? PDFLib.rgb(0,0,0) : PDFLib.rgb(0.5,0.5,0.5);
               page.drawLine({ start: { x: left, y: y }, end: { x: right, y: y }, thickness, color});
-              y -= (size + 8); // **FIX**: Increased space AFTER the line, before drawing text.
+              y -= (size + 8); // Space AFTER the line, before drawing text.
+            } else {
+              y -= (size + 6); // Regular space for a group item
             }
 
             page.drawText(item.name, { x: descX + 5, y, font, size });
             drawRightAlignedText(fmtCurr(item.budget), budgetX, numberColWidth, font, size);
             drawRightAlignedText(fmtCurr(item.actual), actualX, numberColWidth, font, size);
             drawRightAlignedText(fmtCurr(item.variance), varianceX, numberColWidth, font, size);
-
-            // Decrement y for the next line's position
-            y -= (size + (isTotalOrBalance ? 8 : 6)); 
         }
     }
 
