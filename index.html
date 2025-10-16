@@ -172,7 +172,7 @@
   </div>
 
 <script>
-  console.log("RapidShade: [WIDGET] v9.4 ▶️ Final PDF font and spacing polish");
+  console.log("RapidShade: [WIDGET] v9.5 ▶️ Final PDF layout and alignment fixes");
 
   // === Configuration Constants ===
   // Logo URL (embed in header)
@@ -706,8 +706,7 @@ async function generatePdf() {
     // Section builder
     let noteCounter = 1;
     async function buildSection(recs, details, cats, refField, key) {
-      // Note: `recs` is now pre-filtered before calling this function
-      if (!recs.length) return { budget: 0, actual: 0, variance: 0, effective: 0 };
+      if (!recs.length) return { budget: 0, actual: 0, variance: 0 };
 
       if (y < 150) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
       
@@ -715,12 +714,17 @@ async function generatePdf() {
       page.drawText(SECTION_HEADERS[key], { x: left + 5, y, font: ub, size: 16 });
       y -= 28;
       
-      const numberColWidth = 80;
-      const textPadding = 12; 
+      const numberColWidth = 90; // Increased width for number columns
+      const textPadding = 5; 
       const varianceX = right - numberColWidth;
       const actualX = varianceX - numberColWidth;
       const budgetX = actualX - numberColWidth;
       const descX = left;
+      
+      const drawRightAlignedText = (text, colX, colW, font, size, color) => {
+          const textW = font.widthOfTextAtSize(text, size);
+          page.drawText(text, { x: colX + colW - textW - textPadding, y, font, size, color });
+      };
       
       page.drawText('Description', { x: descX + 5, y, font: ub, size: 11 });
       page.drawText('Budget', { x: budgetX, y, font: ub, size: 11 });
@@ -728,7 +732,7 @@ async function generatePdf() {
       page.drawText('Variance', { x: varianceX, y, font: ub, size: 11 });
       y -= 20;
 
-      let secSum = { budget: 0, actual: 0, variance: 0, effective: 0 };
+      let secSum = { budget: 0, actual: 0, variance: 0 };
       for (let h of recs) {
         if (y < 120) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
         page.drawRectangle({ x: left, y: y - 4, width: right - left, height: 20, color: PDFLib.rgb(0.95, 0.95, 0.95) });
@@ -754,17 +758,13 @@ async function generatePdf() {
               notedRevenues.push({ ref: noteCounter, description: d.Description || '', note: d.Notes });
               noteCounter++;
           }
-
-          const budgetTxt = fmtCurr(budget);
-          const actualTxt = fmtCurr(actual);
-          const varianceTxt = fmtCurr(variance);
           
           const descMaxW = budgetX - descX - 10;
           const wrapResult = drawWrapped(page, description, descX + 5, y, descMaxW, uf, 11, 13);
           
-          page.drawText(budgetTxt, { x: budgetX + numberColWidth - uf.widthOfTextAtSize(budgetTxt, 11) - textPadding, y, font: uf, size: 11 });
-          page.drawText(actualTxt, { x: actualX + numberColWidth - uf.widthOfTextAtSize(actualTxt, 11) - textPadding, y, font: uf, size: 11 });
-          page.drawText(varianceTxt, { x: varianceX + numberColWidth - uf.widthOfTextAtSize(varianceTxt, 11) - textPadding, y, font: uf, size: 11 });
+          drawRightAlignedText(fmtCurr(budget), budgetX, numberColWidth, uf, 11);
+          drawRightAlignedText(fmtCurr(actual), actualX, numberColWidth, uf, 11);
+          drawRightAlignedText(fmtCurr(variance), varianceX, numberColWidth, uf, 11);
           
           y = wrapResult.nextY + 13 - (13 * wrapResult.linesUsed);
           
@@ -773,17 +773,13 @@ async function generatePdf() {
           groupSum.budget += budget;
           groupSum.actual += actual;
           groupSum.variance += variance;
-          secSum.effective += (d.Actual || d.Budget || 0);
         });
 
         if (y < 60) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
         page.drawText('Group Total:', { x: descX + 5, y, font: ub, size: 12 });
-        const gsBudgetTxt = fmtCurr(groupSum.budget);
-        page.drawText(gsBudgetTxt, { x: budgetX + numberColWidth - ub.widthOfTextAtSize(gsBudgetTxt, 12) - textPadding, y, font: ub, size: 12 });
-        const gsActualTxt = fmtCurr(groupSum.actual);
-        page.drawText(gsActualTxt, { x: actualX + numberColWidth - ub.widthOfTextAtSize(gsActualTxt, 12) - textPadding, y, font: ub, size: 12 });
-        const gsVarianceTxt = fmtCurr(groupSum.variance);
-        page.drawText(gsVarianceTxt, { x: varianceX + numberColWidth - ub.widthOfTextAtSize(gsVarianceTxt, 12) - textPadding, y, font: ub, size: 12 });
+        drawRightAlignedText(fmtCurr(groupSum.budget), budgetX, numberColWidth, ub, 12);
+        drawRightAlignedText(fmtCurr(groupSum.actual), actualX, numberColWidth, ub, 12);
+        drawRightAlignedText(fmtCurr(groupSum.variance), varianceX, numberColWidth, ub, 12);
         y -= 28;
 
         reportSummaryData.push({ type: 'group', section: key, name: hdrTxt, ...groupSum });
@@ -793,57 +789,34 @@ async function generatePdf() {
       }
 
       if (y < 80) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
-      const totalBarFontSize = 13; // Reduced font size for totals bar
+      const totalBarFontSize = 13;
+      const white = PDFLib.rgb(1,1,1);
       page.drawRectangle({ x: left, y: y - 4, width: right - left, height: 20, color: PDFLib.rgb(0.17, 0.24, 0.31) });
       const secTitleTxt = `TOTAL ${key.toUpperCase()}`;
-      page.drawText(secTitleTxt, { x: descX + 5, y, font: ub, size: totalBarFontSize, color: PDFLib.rgb(1,1,1) });
-      const secBudgetTxt = fmtCurr(secSum.budget);
-      page.drawText(secBudgetTxt, { x: budgetX + numberColWidth - ub.widthOfTextAtSize(secBudgetTxt, totalBarFontSize) - textPadding, y, font: ub, size: totalBarFontSize, color: PDFLib.rgb(1,1,1) });
-      const secActualTxt = fmtCurr(secSum.actual);
-      page.drawText(secActualTxt, { x: actualX + numberColWidth - ub.widthOfTextAtSize(secActualTxt, totalBarFontSize) - textPadding, y, font: ub, size: totalBarFontSize, color: PDFLib.rgb(1,1,1) });
-      const secVarianceTxt = fmtCurr(secSum.variance);
-      page.drawText(secVarianceTxt, { x: varianceX + numberColWidth - ub.widthOfTextAtSize(secVarianceTxt, totalBarFontSize) - textPadding, y, font: ub, size: totalBarFontSize, color: PDFLib.rgb(1,1,1) });
+      page.drawText(secTitleTxt, { x: descX + 5, y, font: ub, size: totalBarFontSize, color: white });
+      drawRightAlignedText(fmtCurr(secSum.budget), budgetX, numberColWidth, ub, totalBarFontSize, white);
+      drawRightAlignedText(fmtCurr(secSum.actual), actualX, numberColWidth, ub, totalBarFontSize, white);
+      drawRightAlignedText(fmtCurr(secSum.variance), varianceX, numberColWidth, ub, totalBarFontSize, white);
       y -= 30;
 
       reportSummaryData.push({ type: 'sectionTotal', section: key, name: secTitleTxt, ...secSum });
       return secSum;
     }
 
-    let totalE = { budget: 0, actual: 0, variance: 0, effective: 0 };
-    let totalR = { budget: 0, actual: 0, variance: 0, effective: 0 };
+    let totalE = { budget: 0, actual: 0, variance: 0 };
+    let totalR = { budget: 0, actual: 0, variance: 0 };
     
-    // --- Render Expenses Section (with check for empty data) ---
+    // --- Render Expenses Section ---
     if (rpt === 'expenses' || rpt === 'combined') {
-        const expenseRecs = allExpenses.filter(h => {
-            const r = h.Event;
-            return Array.isArray(r) ? r[1] === currentRecord.id : r === currentRecord.id;
-        });
-        if (expenseRecs.length > 0) {
-            totalE = await buildSection(expenseRecs, allExpenseDetails, allExpenseCats, 'Expense', 'expenses');
-        } else {
-            if (y < 80) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
-            page.drawText('No records to display for Expenses.', { x: left, y, font: uf, size: 12, color: PDFLib.rgb(0.5, 0.5, 0.5) });
-            y -= 20;
-        }
+        const expenseRecs = allExpenses.filter(h => Array.isArray(h.Event) ? h.Event[1] === currentRecord.id : h.Event === currentRecord.id);
+        totalE = await buildSection(expenseRecs, allExpenseDetails, allExpenseCats, 'Expense', 'expenses');
     }
 
-    // --- Render Revenues Section (with check for empty data) ---
+    // --- Render Revenues Section ---
     if (rpt === 'revenues' || rpt === 'combined') {
-        if (rpt === 'combined') {
-            if (y < 150) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
-            else { y -= 20; } // Add a little space between sections
-        }
-        const revenueRecs = allRevenues.filter(h => {
-            const r = h.Event;
-            return Array.isArray(r) ? r[1] === currentRecord.id : r === currentRecord.id;
-        });
-        if (revenueRecs.length > 0) {
-            totalR = await buildSection(revenueRecs, allRevenueDetails, allRevenueCats, 'Revenue', 'revenues');
-        } else {
-            if (y < 80) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
-            page.drawText('No records to display for Revenues.', { x: left, y, font: uf, size: 12, color: PDFLib.rgb(0.5, 0.5, 0.5) });
-            y -= 20;
-        }
+        if (rpt === 'combined' && y < height - contentOffset) { y -= 20; }
+        const revenueRecs = allRevenues.filter(h => Array.isArray(h.Event) ? h.Event[1] === currentRecord.id : h.Event === currentRecord.id);
+        totalR = await buildSection(revenueRecs, allRevenueDetails, allRevenueCats, 'Revenue', 'revenues');
     }
 
 
@@ -853,18 +826,20 @@ async function generatePdf() {
       const balanceBudget = totalR.budget - totalE.budget;
       const balanceActual = totalR.actual - totalE.actual;
       const balanceVariance = balanceBudget - balanceActual;
-      const balBudgetTxt = fmtCurr(balanceBudget);
-      const balActualTxt = fmtCurr(balanceActual);
-      const balVarianceTxt = fmtCurr(balanceVariance);
     
       const getColorForValue = (value) => value > 0 ? PDFLib.rgb(0.17, 0.53, 0.23) : value < 0 ? PDFLib.rgb(0.8, 0.2, 0.2) : PDFLib.rgb(0.17, 0.24, 0.31);
 
-      const numberColWidth = 80;
-      const textPadding = 12; 
+      const numberColWidth = 90; // Increased width for number columns
+      const textPadding = 5; 
       const varianceX = right - numberColWidth;
       const actualX = varianceX - numberColWidth;
       const budgetX = actualX - numberColWidth;
       const descX = left;
+
+      const drawRightAlignedText = (text, colX, colW, font, size, color) => {
+          const textW = font.widthOfTextAtSize(text, size);
+          page.drawText(text, { x: colX + colW - textW - textPadding, y, font, size, color });
+      };
 
       // Draw colored rectangles
       page.drawRectangle({ x: budgetX, y: y - 4, width: numberColWidth, height: 20, color: getColorForValue(balanceBudget) });
@@ -880,9 +855,9 @@ async function generatePdf() {
       const textColor = PDFLib.rgb(1, 1, 1);
       const balanceFontSize = 13;
       page.drawText('BALANCE', { x: descX + 5, y, font: ub, size: balanceFontSize, color: textColor });
-      page.drawText(balBudgetTxt, { x: budgetX + numberColWidth - ub.widthOfTextAtSize(balBudgetTxt, balanceFontSize) - textPadding, y, font: ub, size: balanceFontSize, color: textColor });
-      page.drawText(balActualTxt, { x: actualX + numberColWidth - ub.widthOfTextAtSize(balActualTxt, balanceFontSize) - textPadding, y, font: ub, size: balanceFontSize, color: textColor });
-      page.drawText(balVarianceTxt, { x: varianceX + numberColWidth - ub.widthOfTextAtSize(balVarianceTxt, balanceFontSize) - textPadding, y, font: ub, size: balanceFontSize, color: textColor });
+      drawRightAlignedText(fmtCurr(balanceBudget), budgetX, numberColWidth, ub, balanceFontSize, textColor);
+      drawRightAlignedText(fmtCurr(balanceActual), actualX, numberColWidth, ub, balanceFontSize, textColor);
+      drawRightAlignedText(fmtCurr(balanceVariance), varianceX, numberColWidth, ub, balanceFontSize, textColor);
       y -= 30;
 
       reportSummaryData.push({ type: 'balance', name: 'BALANCE', budget: balanceBudget, actual: balanceActual, variance: balanceVariance });
@@ -913,12 +888,17 @@ async function generatePdf() {
         page.drawText('Report Summary', { x: left, y, font: ub, size: 18 });
         y -= 30;
 
-        const numberColWidth = 80;
-        const textPadding = 8; // Padding for numbers
+        const numberColWidth = 90;
+        const textPadding = 5; 
         const varianceX = right - numberColWidth;
         const actualX = varianceX - numberColWidth;
         const budgetX = actualX - numberColWidth;
         const descX = left;
+        
+        const drawRightAlignedText = (text, colX, colW, font, size, color) => {
+          const textW = font.widthOfTextAtSize(text, size);
+          page.drawText(text, { x: colX + colW - textW - textPadding, y, font, size, color });
+        };
 
         page.drawText('Category / Summary', { x: descX + 5, y, font: ub, size: 11 });
         page.drawText('Budget', { x: budgetX, y, font: ub, size: 11 });
@@ -941,16 +921,12 @@ async function generatePdf() {
             }
 
             page.drawText(item.name, { x: descX + 5, y, font, size });
-            const budgetTxt = fmtCurr(item.budget);
-            const actualTxt = fmtCurr(item.actual);
-            const varianceTxt = fmtCurr(item.variance);
-
-            page.drawText(budgetTxt, { x: budgetX + numberColWidth - font.widthOfTextAtSize(budgetTxt, size) - textPadding, y, font, size });
-            page.drawText(actualTxt, { x: actualX + numberColWidth - font.widthOfTextAtSize(actualTxt, size) - textPadding, y, font, size });
-            page.drawText(varianceTxt, { x: varianceX + numberColWidth - font.widthOfTextAtSize(varianceTxt, size) - textPadding, y, font, size });
+            drawRightAlignedText(fmtCurr(item.budget), budgetX, numberColWidth, font, size);
+            drawRightAlignedText(fmtCurr(item.actual), actualX, numberColWidth, font, size);
+            drawRightAlignedText(fmtCurr(item.variance), varianceX, numberColWidth, font, size);
 
             if (!isTotalOrBalance) {
-                y -= (size + 5); // Standard space after a normal row
+                y -= (size + 8); // Standard space after a normal row
             }
         }
     }
