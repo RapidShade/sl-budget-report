@@ -705,4 +705,357 @@ async function generatePdf() {
 
     const fieldsArr = [
       `Code: ${currentRecord.EventCode || 'N/A'}`, `Sport: ${currentRecord.Sport || 'N/A'}`,
-      `Discipline: ${currentRecord.Discipline || 'N/A'}`, `Dates: ${fmtDate(currentRecord.DateStart)} – ${fmtDate(currentRecord.DateEnd)}
+      `Discipline: ${currentRecord.Discipline || 'N/A'}`, `Dates: ${fmtDate(currentRecord.DateStart)} – ${fmtDate(currentRecord.DateEnd)}`,
+      `City: ${currentRecord.CITY || 'N/A'}`, `Venue: ${currentRecord.VENUE || 'N/A'}`,
+      `Level: ${currentRecord.LEVEL || 'N/A'}`
+    ];
+    const colW = (right - left) / 2;
+    fieldsArr.forEach((f,i) => {
+      const x0 = left + (i % 2) * colW;
+      const y0 = y - Math.floor(i/2) * 18;
+      page.drawText(f, { x: x0, y: y0, font: uf, size: 12 });
+    });
+    y -= Math.ceil(fieldsArr.length / 2) * 18 + 20;
+
+    // Section builder
+    async function buildSection(recs, details, cats, refField, key) {
+      if (!recs.length) return { budget: 0, actual: 0, variance: 0 };
+
+      if (y < 150) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
+      
+      page.drawRectangle({ x: left, y: y - 4, width: right - left, height: 20, color: PDFLib.rgb(0.9, 0.9, 0.9) });
+      page.drawText(SECTION_HEADERS[key], { x: left + 5, y, font: ub, size: 16 });
+      y -= 28;
+      
+      const numberColWidth = 90; 
+      const textPadding = 5; 
+      const varianceX = right - numberColWidth;
+      const actualX = varianceX - numberColWidth;
+      const budgetX = actualX - numberColWidth;
+      const descX = left;
+      
+      const drawRightAlignedText = (text, colX, colW, font, size, color) => {
+          const textW = font.widthOfTextAtSize(text, size);
+          page.drawText(text, { x: colX + colW - textW - textPadding, y, font, size, color });
+      };
+      
+      page.drawText('Description', { x: descX + 5, y, font: ub, size: 11 });
+      page.drawText('Budget', { x: budgetX, y, font: ub, size: 11 });
+      page.drawText('Actual', { x: actualX, y, font: ub, size: 11 });
+      page.drawText('Variance', { x: varianceX, y, font: ub, size: 11 });
+      y -= 20;
+
+      let secSum = { budget: 0, actual: 0, variance: 0 };
+      for (let h of recs) {
+        if (y < 120) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
+        page.drawRectangle({ x: left, y: y - 4, width: right - left, height: 20, color: PDFLib.rgb(0.95, 0.95, 0.95) });
+        const cat = cats.find(c => c.id === h.Category);
+        const hdrTxt = (cat ? cat.Name : 'No Category') + (h.Description ? ` > ${h.Description}` : '');
+        page.drawText(hdrTxt, { x: left + 5, y, font: ub, size: 14 });
+        y -= 24;
+
+        let groupSum = { budget: 0, actual: 0, variance: 0 };
+        details.filter(d => {
+          const r = d[refField];
+          return Array.isArray(r) ? r[1] === h.id : r === h.id;
+        }).forEach(d => {
+          if (y < 60) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
+          
+          const budget = d.Budget || 0;
+          const actual = d.Actual || 0;
+          const variance = (key === 'revenues') ? (actual - budget) : (budget - actual);
+          
+          let description = d.Description || '';
+          
+          // UPDATED: Logic to handle notes for both Revenues and Expenses with distinct prefixes
+          if (d.Notes) {
+              if (key === 'revenues') {
+                  const ref = `R-${pdfRevenueNoteCounter}`;
+                  description += ` [${ref}]`;
+                  notedRevenues.push({ ref: ref, description: d.Description || '', note: d.Notes });
+                  pdfRevenueNoteCounter++;
+              } else if (key === 'expenses') {
+                  const ref = `E-${pdfExpenseNoteCounter}`;
+                  description += ` [${ref}]`;
+                  notedExpenses.push({ ref: ref, description: d.Description || '', note: d.Notes });
+                  pdfExpenseNoteCounter++;
+              }
+          }
+          
+          const descMaxW = budgetX - descX - 10;
+          const wrapResult = drawWrapped(page, description, descX + 5, y, descMaxW, uf, 11, 13);
+          
+          drawRightAlignedText(fmtCurr(budget), budgetX, numberColWidth, uf, 11);
+          drawRightAlignedText(fmtCurr(actual), actualX, numberColWidth, uf, 11);
+          drawRightAlignedText(fmtCurr(variance), varianceX, numberColWidth, uf, 11);
+          
+          y = wrapResult.nextY + 13 - (13 * wrapResult.linesUsed);
+          
+          if (enablePdfDetailLines) { page.drawLine({ start: { x: left, y: y - 2 }, end:   { x: right, y: y-2 }, thickness: pdfDetailLineWidth, color: pdfDetailLineColor }); }
+          y -= 18;
+          groupSum.budget += budget;
+          groupSum.actual += actual;
+          groupSum.variance += variance;
+        });
+
+        if (y < 60) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
+        // y -= 4; // **REMOVED in v9.7**: This was creating too much space before the group total.
+        page.drawText('Group Total:', { x: descX + 5, y, font: ub, size: 12 });
+        drawRightAlignedText(fmtCurr(groupSum.budget), budgetX, numberColWidth, ub, 12);
+        drawRightAlignedText(fmtCurr(groupSum.actual), actualX, numberColWidth, ub, 12);
+        drawRightAlignedText(fmtCurr(groupSum.variance), varianceX, numberColWidth, ub, 12);
+        y -= 24; // Adjusted gap after group total (v9.7)
+
+        reportSummaryData.push({ type: 'group', section: key, name: hdrTxt, ...groupSum });
+        secSum.budget += groupSum.budget;
+        secSum.actual += groupSum.actual;
+        secSum.variance += groupSum.variance;
+      }
+
+      if (y < 80) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
+      const totalBarFontSize = 13;
+      const white = PDFLib.rgb(1,1,1);
+      page.drawRectangle({ x: left, y: y - 4, width: right - left, height: 20, color: PDFLib.rgb(0.17, 0.24, 0.31) });
+      const secTitleTxt = `TOTAL ${key.toUpperCase()}`;
+      page.drawText(secTitleTxt, { x: descX + 5, y, font: ub, size: totalBarFontSize, color: white });
+      drawRightAlignedText(fmtCurr(secSum.budget), budgetX, numberColWidth, ub, totalBarFontSize, white);
+      drawRightAlignedText(fmtCurr(secSum.actual), actualX, numberColWidth, ub, totalBarFontSize, white);
+      drawRightAlignedText(fmtCurr(secSum.variance), varianceX, numberColWidth, ub, totalBarFontSize, white);
+      y -= 30;
+
+      reportSummaryData.push({ type: 'sectionTotal', section: key, name: secTitleTxt, ...secSum });
+      return secSum;
+    }
+
+    let totalE = { budget: 0, actual: 0, variance: 0 };
+    let totalR = { budget: 0, actual: 0, variance: 0 };
+    
+    // --- Render Expenses Section ---
+    if (rpt === 'expenses' || rpt === 'combined') {
+        const expenseRecs = allExpenses.filter(h => Array.isArray(h.Event) ? h.Event[1] === currentRecord.id : h.Event === currentRecord.id);
+        totalE = await buildSection(expenseRecs, allExpenseDetails, allExpenseCats, 'Expense', 'expenses');
+    }
+
+    // --- Render Revenues Section ---
+    if (rpt === 'revenues' || rpt === 'combined') {
+        if (rpt === 'combined' && y < height - contentOffset) { y -= 20; }
+        const revenueRecs = allRevenues.filter(h => Array.isArray(h.Event) ? h.Event[1] === currentRecord.id : h.Event === currentRecord.id);
+        totalR = await buildSection(revenueRecs, allRevenueDetails, allRevenueCats, 'Revenue', 'revenues');
+    }
+
+
+    if (rpt === 'combined') {
+      if (y < 80) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
+    
+      const balanceBudget = totalR.budget - totalE.budget;
+      const balanceActual = totalR.actual - totalE.actual;
+      const balanceVariance = balanceBudget - balanceActual;
+    
+      const getColorForValue = (value) => value > 0 ? PDFLib.rgb(0.17, 0.53, 0.23) : value < 0 ? PDFLib.rgb(0.8, 0.2, 0.2) : PDFLib.rgb(0.17, 0.24, 0.31);
+
+      const numberColWidth = 90; 
+      const textPadding = 5; 
+      const varianceX = right - numberColWidth;
+      const actualX = varianceX - numberColWidth;
+      const budgetX = actualX - numberColWidth;
+      const descX = left;
+
+      const drawRightAlignedText = (text, colX, colW, font, size, color) => {
+          const textW = font.widthOfTextAtSize(text, size);
+          page.drawText(text, { x: colX + colW - textW - textPadding, y, font, size, color });
+      };
+
+      // Draw colored rectangles
+      page.drawRectangle({ x: budgetX, y: y - 4, width: numberColWidth, height: 20, color: getColorForValue(balanceBudget) });
+      page.drawRectangle({ x: actualX, y: y - 4, width: numberColWidth, height: 20, color: getColorForValue(balanceActual) });
+      page.drawRectangle({ x: varianceX, y: y - 4, width: numberColWidth, height: 20, color: getColorForValue(balanceVariance) });
+      page.drawRectangle({ x: descX, y: y - 4, width: budgetX - descX, height: 20, color: PDFLib.rgb(0.17, 0.24, 0.31) });
+
+      // Draw white separator lines to fix color bleed
+      const separatorColor = PDFLib.rgb(1,1,1);
+      page.drawLine({ start: { x: actualX, y: y - 4 }, end: { x: actualX, y: y + 16 }, thickness: 0.5, color: separatorColor });
+      page.drawLine({ start: { x: varianceX, y: y - 4 }, end: { x: varianceX, y: y + 16 }, thickness: 0.5, color: separatorColor });
+      
+      const textColor = PDFLib.rgb(1, 1, 1);
+      const balanceFontSize = 13;
+      page.drawText('BALANCE', { x: descX + 5, y, font: ub, size: balanceFontSize, color: textColor });
+      drawRightAlignedText(fmtCurr(balanceBudget), budgetX, numberColWidth, ub, balanceFontSize, textColor);
+      drawRightAlignedText(fmtCurr(balanceActual), actualX, numberColWidth, ub, balanceFontSize, textColor);
+      drawRightAlignedText(fmtCurr(balanceVariance), varianceX, numberColWidth, ub, balanceFontSize, textColor);
+      y -= 30;
+
+      reportSummaryData.push({ type: 'balance', name: 'BALANCE', budget: balanceBudget, actual: balanceActual, variance: balanceVariance });
+    }
+
+    // === NEW: Notes Page (Updated to handle Expenses & Revenues) ===
+    if (notedRevenues.length > 0 || notedExpenses.length > 0) {
+        page = pdfDoc.addPage();
+        y = page.getSize().height - contentOffset;
+        page.drawText('Notes & Remarks', { x: left, y, font: ub, size: 18 });
+        y -= 30;
+
+        // --- Render Expenses Notes ---
+        if (notedExpenses.length > 0) {
+            // Check space
+            if (y < 80) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
+            page.drawText('Expenses Notes', { x: left, y, font: ub, size: 14, decoration: 'underline' });
+            y -= 20;
+
+            for (const item of notedExpenses) {
+                if (y < 100) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
+                const refText = `[${item.ref}] ${item.description}`;
+                y = drawWrapped(page, refText, left, y, right - left, ub, 12, 15).nextY;
+                const noteText = item.note || '';
+                y = drawWrapped(page, noteText, left + 15, y, right - left - 15, uf, 11, 14).nextY;
+                y -= 15;
+            }
+            y -= 20; // Extra gap after Expenses section
+        }
+
+        // --- Render Revenues Notes ---
+        if (notedRevenues.length > 0) {
+            // Check space
+            if (y < 80) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
+            page.drawText('Revenues Notes', { x: left, y, font: ub, size: 14, decoration: 'underline' });
+            y -= 20;
+
+            for (const item of notedRevenues) {
+                if (y < 100) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; }
+                const refText = `[${item.ref}] ${item.description}`;
+                y = drawWrapped(page, refText, left, y, right - left, ub, 12, 15).nextY;
+                const noteText = item.note || '';
+                y = drawWrapped(page, noteText, left + 15, y, right - left - 15, uf, 11, 14).nextY;
+                y -= 15;
+            }
+        }
+    }
+
+    // === NEW: Summary Page (Preserved from v9.7) ===
+    if (reportSummaryData.length > 0) {
+        page = pdfDoc.addPage();
+        y = page.getSize().height - contentOffset;
+        page.drawText('Report Summary', { x: left, y, font: ub, size: 18 });
+        y -= 30;
+
+        const numberColWidth = 90;
+        const textPadding = 5; 
+        const varianceX = right - numberColWidth;
+        const actualX = varianceX - numberColWidth;
+        const budgetX = actualX - numberColWidth;
+        const descX = left;
+        
+        const drawRightAlignedText = (text, colX, colW, font, size, color) => {
+          const textW = font.widthOfTextAtSize(text, size);
+          page.drawText(text, { x: colX + colW - textW - textPadding, y, font, size, color });
+        };
+
+        page.drawText('Category / Summary', { x: descX + 5, y, font: ub, size: 11 });
+        page.drawText('Budget', { x: budgetX, y, font: ub, size: 11 });
+        page.drawText('Actual', { x: actualX, y, font: ub, size: 11 });
+        page.drawText('Variance', { x: varianceX, y, font: ub, size: 11 });
+        y -= 20;
+
+        for (const item of reportSummaryData) {
+            if (y < 80) { page = pdfDoc.addPage(); y = page.getSize().height - contentOffset; } // Checked safely for wrap
+            const isTotalOrBalance = item.type === 'sectionTotal' || item.type === 'balance';
+            const font = isTotalOrBalance ? ub : uf; 
+            const size = isTotalOrBalance ? 12 : 11;
+            const lh = size + 4; // Define line height
+
+            if(isTotalOrBalance) {
+              y -= 10; // Space above the line
+              const thickness = item.type === 'balance' ? 1.5 : 0.5;
+              const color = item.type === 'balance' ? PDFLib.rgb(0,0,0) : PDFLib.rgb(0.5,0.5,0.5);
+              page.drawLine({ start: { x: left, y: y }, end: { x: right, y: y }, thickness, color});
+              y -= (size + 8); // Space AFTER the line, before drawing text.
+            } else {
+              y -= (size + 6); // Regular space for a group item
+            }
+
+            // Wrapping logic
+            const descMaxW = budgetX - descX - 10;
+            const wrapRes = drawWrapped(page, item.name, descX + 5, y, descMaxW, font, size, lh);
+
+            // Numbers aligned with top line (y)
+            drawRightAlignedText(fmtCurr(item.budget), budgetX, numberColWidth, font, size);
+            drawRightAlignedText(fmtCurr(item.actual), actualX, numberColWidth, font, size);
+            drawRightAlignedText(fmtCurr(item.variance), varianceX, numberColWidth, font, size);
+
+            // Adjust y for the next iteration based on wrapped lines
+            if (wrapRes.linesUsed > 1) {
+                y -= (wrapRes.linesUsed - 1) * lh;
+            }
+        }
+    }
+
+    // Footer & pagination
+    const pages = pdfDoc.getPages();
+    const now = new Date();
+    const pad = n => n.toString().padStart(2, '0');
+    const stamp = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}.${pad(now.getSeconds())}`;
+
+    pages.forEach((pg,i) => {
+      pg.drawText(`Date: ${stamp}`, { x: 50, y: 20, font: uf, size: 8 });
+      pg.drawText('HELLENIC SWIMMING FEDERATION - ΚΟΛΥΜΒΗΤΙΚΗ ΟΜΟΣΠΟΝΔΙΑ ΕΛΛΑΔΑΣ', { x: 170, y: 20, font: uf, size: 8 });
+      const num = `Page ${i+1} of ${pages.length}`;
+      pg.drawText(num, { x: pg.getWidth() - 50 - uf.widthOfTextAtSize(num,8), y: 20, font: uf, size:8 });
+    });
+
+    // Save & download PDF
+    const pdfBytes = await pdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${currentRecord.Name}_${rpt==='combined'?'Combined':(rpt==='revenues'?'Revenues':'Expenses')}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+  } catch (err) {
+    console.error("PDF error:", err);
+    document.getElementById('record-info').textContent = 'Error generating PDF.';
+  } finally {
+    const btn = document.getElementById('downloadPdfButton');
+    btn.disabled = false;
+    btn.textContent = 'Download PDF';
+  }
+}
+
+  // === Initialization ===
+grist.ready({
+  requiredAccess: 'full',
+  columns:[
+    'EventCode','Name','Sport','Discipline','DateStart','DateEnd',
+    'PERIF_CITY','CITY','VENUE','LEVEL','POOL_SIZE','Organiser', 'Notes'
+  ]
+});
+
+// 1) Bind the onRecord handler immediately
+grist.onRecord(record => {
+  onRecordUpdate(record);
+  renderHtmlReport();
+});
+
+// 2) Load all tables; once data is in, *re*-call onRecordUpdate
+fetchData().then(success => {
+  if (success && currentRecord) {
+    onRecordUpdate(currentRecord);
+    renderHtmlReport();
+  }
+});
+
+// 3) Keep your radio‐button switch and download handlers
+document.querySelectorAll('input[name=reportType]')
+  .forEach(r => r.addEventListener('change', renderHtmlReport));
+
+document.getElementById('downloadPdfButton')
+  .addEventListener('click', generatePdf);
+
+document.getElementById('downloadXlsxButton')
+  .addEventListener('click', generateXlsx);
+
+// (Removed any fetchSelectedRecord or setTimeout hacks)
+
+</script>
+</body>
+</html>
